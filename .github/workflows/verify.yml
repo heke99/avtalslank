@@ -40,6 +40,7 @@ jobs:
       - name: Verify PDF tool and fail-closed worker readiness
         run: |
           docker run --rm --entrypoint qpdf avtalslank-worker-check --version
+          docker run --rm --entrypoint node avtalslank-worker-check --import tsx -e 'import("./apps/worker/probes.ts").then(async ({PdfProbe})=>{const {QpdfInspector}=await import("./packages/document-processing/src/production.ts");if(!await new PdfProbe(new QpdfInspector("qpdf",5000)).check())process.exit(1);console.log("Real qpdf inspection passed.");})'
           docker run --detach --name al-worker-check --publish 127.0.0.1:8097:8080 avtalslank-worker-check
           trap 'docker logs al-worker-check; docker rm --force al-worker-check' EXIT
           for i in $(seq 1 30); do
@@ -48,4 +49,10 @@ jobs:
             sleep 1
           done
           test "$worker_status" = '503'
+          test "$(curl --silent --output /tmp/al-worker-live.json --write-out '%{http_code}' http://127.0.0.1:8097/live)" = '200'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8097/ready)" = '503'
+          test "$(curl --silent --request POST --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8097/live)" = '405'
+          docker stop --time 65 al-worker-check
+          test "$(docker inspect --format '{{.State.ExitCode}}' al-worker-check)" = '0'
+          docker logs al-worker-check | grep 'worker_stopped'
           node -e 'const h=JSON.parse(require("fs").readFileSync("/tmp/al-worker-health.json","utf8")); if(h.configured!==false||h.healthy!==false||h.signingConfigured!==false)process.exit(1); console.log("Packaged worker starts and fails readiness without dedicated credentials.");'

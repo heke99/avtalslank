@@ -25,3 +25,5 @@ Current account/integration controls: docs/work/account-security-controls.md. Ke
 Current template/editor iteration: docs/work/templates-and-editor.md. Template application copies actual fields and maps roles explicitly; existing server field/generation/tenant checks remain authoritative. Never silently discard unsaved document fields or treat template signature inputs as verified signatures.
 
 Current contact transfer iteration: docs/work/contact-imports.md. Import batches are atomic and do not overwrite existing or archived contacts. Replays must recheck identity/scope before returning stored counts. CSV export includes only the visible loaded tenant subset and neutralizes formula-like content.
+
+Current runtime/Railway iteration: docs/work/railway-runtime.md. /live is process liveness only; /ready must reflect actual dependency checks and fresh successful polls. Never refresh success timestamps on failures or enable signing from environment-variable presence alone.
