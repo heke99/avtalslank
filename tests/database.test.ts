@@ -1507,7 +1507,9 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
           consentVersion: "email-approval-v1",
           consent: true,
           values: { [fid]: "Synthetic Signer" },
+          identity:{name:"Synthetic Signer",personalNumber:"199001010017"},
         };
+        await assert.rejects(()=>signer("decide",{decision:{...decision,identity:{name:"X",personalNumber:"199001010018"}}}),/INVALID_SIGNER_IDENTITY/);
         const approved: any = await signer("decide", { decision });
         assert.equal(approved.data.envelopeStatus, "finalizing");
         let finalize = (
@@ -1527,6 +1529,10 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
         const result: any = await route("final");
         assert.ok(result instanceof Response);
         const archive = new Uint8Array(await result.arrayBuffer());
+        const {verifyEvidenceZip}=await import("../packages/evidence/src/zip.ts");
+        assert.equal((await verifyEvidenceZip(archive)).verified,true);
+        const signerArchive=await signer("evidence");assert.ok(signerArchive instanceof Response);
+        assert.equal(await sha256Hex(new Uint8Array(await (signerArchive as Response).arrayBuffer())),await sha256Hex(archive));
         assert.equal(archive[0], 0x50);
         assert.equal(archive[1], 0x4b);
         const recipientFinal = await signer("final", { documentId });
@@ -1539,6 +1545,16 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
           ).getPageCount(),
           2,
         );
+        await db.exec("reset role");
+        const originalEvidence=(await one("select signer_evidence as ev from al_private.signing_links where envelope_id=$1",[envelope.id])).ev;
+        assert.equal(originalEvidence.personalNumber,"199001010017");assert.match(originalEvidence.signingHash,/^[a-f0-9]{64}$/);
+        await service();const replay=await signer("decide",{decision});assert.equal((replay as any).data.status,"signed");
+        await db.exec("reset role");assert.deepEqual((await one("select signer_evidence as ev from al_private.signing_links where envelope_id=$1",[envelope.id])).ev,originalEvidence);
+        const completion=(await one("select count(*)::int n from al_private.signing_outbox where envelope_id=$1 and kind='completion'",[envelope.id])).n;assert.equal(completion,1);
+        await db.query("update al_private.signing_outbox set status='cancelled' where status='pending' and (envelope_id<>$1 or kind<>'completion')",[envelope.id]);await service();
+        const mailJob=(await client.rpc("al_signing_worker",{p_action:"claim"})).data;assert.equal(mailJob.job.kind,"completion");
+        await processSigningJob(client,config,mailJob,{fetch:async(_url:any,init:any)=>{const m=JSON.parse(init.body);assert.match(m.subject,/signerade avtal/);assert.ok(!JSON.stringify(m).includes("199001010017"));return new Response(JSON.stringify({id:"synthetic-completion-reference"}),{status:200});},postWebhook:async()=>204} as any);
+
         await db.exec("reset role");
         assert.equal(
           (

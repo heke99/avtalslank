@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Avtalslänk API",
-    "version": "0.7.0",
-    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled. User-only account controls register versioned terms acceptance, commercial plan interest (no billing), bounded API-key lifecycle and disabled-webhook secret rotation. API-key expiry is checked before cached responses. New credential secrets are returned only once; mutations are never automatically retried."
+    "version": "0.8.0",
+    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled. User-only account controls register versioned terms acceptance, commercial plan interest (no billing), bounded API-key lifecycle and disabled-webhook secret rotation. API-key expiry is checked before cached responses. New credential secrets are returned only once; mutations are never automatically retried. Signer approval now requires self-declared full name and a twelve-digit Swedish personal number (calendar and checksum validation only). Server records approval time, signing hash and an explicitly unverified forwarded IP observation when available. New final archives include checksums.sha256 and are verified before publishing. Completion messages are transactional, idempotent and do not attach personal documents."
   },
   "servers": [
     {
@@ -1542,7 +1542,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Approve requires decision.identity.name (2–120 characters) and personalNumber (12 digits, optional hyphen). Name/number are self-declared, never eID-verified. Client IP/timestamp/hash fields are not authoritative. Exact replay preserves original evidence."
       }
     },
     "/v1/signer/final": {
@@ -2122,6 +2123,47 @@
                 ]
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/signer/evidence": {
+      "post": {
+        "summary": "Download the completed case evidence ZIP using an unexpired signed recipient link",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Private evidence archive, verified against stored SHA-256",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Case incomplete, link revoked, expired or recipient not signed"
           }
         }
       }

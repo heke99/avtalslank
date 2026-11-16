@@ -1,3 +1,4 @@
+import { appendApprovalReceipt } from "../../packages/signing/src/receipt.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { request as httpsRequest } from "node:https";
@@ -13,7 +14,7 @@ import {
   signingWebhook,
   type SigningField,
 } from "../../packages/signing/src/index.ts";
-import { createEvidenceZip } from "../../packages/evidence/src/zip.ts";
+import { createEvidenceZip, verifyEvidenceZip } from "../../packages/evidence/src/zip.ts";
 import { assertSafeWebhookUrl } from "../../packages/webhooks/src/index.ts";
 export type SigningConfig = {
   secret: string;
@@ -112,7 +113,7 @@ export async function processSigningJob(
       p_lease: job.lease_token,
       p_payload: payload,
     });
-  if (job.kind === "invitation") {
+  if (job.kind === "invitation" || job.kind === "completion") {
     if (Date.parse(expiresAt) <= Date.now())
       return finish({ status: "failed", error: "LINK_EXPIRED" });
     const recipient = snapshot.recipients.find(
@@ -120,7 +121,7 @@ export async function processSigningJob(
     );
     if (!recipient) throw Error("RECIPIENT_NOT_FOUND");
     const token = await deliveryToken(c.secret, job.payload.linkId);
-    const mail = signingInvitation(
+    let mail = signingInvitation(
       {
         name: recipient.name,
         title: snapshot.envelope.title,
@@ -129,6 +130,10 @@ export async function processSigningJob(
       },
       c.publicOrigin,
     );
+    if(job.kind === "completion") {
+      const url=`${c.publicOrigin}/s/#token=${token}`;
+      mail={templateId:"signing-completion",version:1,subject:"Ditt signerade avtal finns att hämta",text:`Avtalet är färdigt. Öppna din personliga länk för att hämta slutdokumentet: ${url}\nLänken gäller till ${expiresAt}. Avtalslänk · Trafexa Nordic AB`,html:`<html lang="sv"><body><p>Avtalet är färdigt.</p><p><a href="${url}">Hämta ditt signerade avtal</a></p><p>Din personliga länk gäller till ${expiresAt}.</p><p>Avtalslänk · Trafexa Nordic AB</p></body></html>`};
+    }
     try {
       const response = await transports.fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -237,32 +242,7 @@ export async function processSigningJob(
         values,
         document.id,
       );
-      const pdf = await PDFDocument.load(rendered.bytes),
-        font = await pdf.embedFont(StandardFonts.Helvetica),
-        page = pdf.addPage([595, 842]);
-      const lines = [
-        "Avtalslank - approval record",
-        `Envelope: ${job.envelope_id}`,
-        `Document: ${document.id}`,
-        `Original SHA-256: ${document.sha256}`,
-        `Snapshot: ${snapshotHash}`,
-        "Method: email approval",
-        "",
-      ];
-      for (const d of decisions)
-        lines.push(
-          `Recipient: ${d.recipientId}`,
-          `Approved: ${d.consumedAt}`,
-          `Intent version: ${d.decision.consentVersion}`,
-          "",
-        );
-      let y = 800;
-      for (const line of lines) {
-        if (y < 40) throw Error("RECEIPT_PAGE_LIMIT");
-        page.drawText(line, { x: 30, y, size: 9, font });
-        y -= 15;
-      }
-      const finalBytes = await pdf.save();
+      const finalBytes = await appendApprovalReceipt(rendered.bytes,{envelopeId:job.envelope_id,documentId:document.id,originalHash:document.sha256,snapshotHash,recipients:snapshot.recipients,decisions});
       await store(document.id, finalBytes, "application/pdf");
       files.push(
         {
@@ -292,12 +272,15 @@ export async function processSigningJob(
     );
     const archive = createEvidenceZip([
       ...files,
+      {path:"checksums.sha256",bytes:new TextEncoder().encode(manifest.entries.map(e=>`${e.sha256}  ${e.path}`).join("\n")+"\n"),mediaType:"text/plain"},
       {
         path: "manifest.json",
         bytes: new TextEncoder().encode(JSON.stringify(manifest)),
         mediaType: "application/json",
       },
     ]);
+    const verification=await verifyEvidenceZip(archive);
+    if(!verification.verified)throw Error("EVIDENCE_ARCHIVE_INVALID");
     await store("evidence", archive, "application/zip");
     return finish({ status: "completed", result: { files: result, manifest } });
   }

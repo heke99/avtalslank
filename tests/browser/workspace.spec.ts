@@ -405,6 +405,7 @@ test("public recipient: document review and explicit approval, no account requir
           body: Buffer.from(bytes),
         });
       if (path.endsWith("/decide")) {
+        expect(body.decision.identity).toEqual({name:"Anna Andersson",personalNumber:"199001010017"});
         expect(body.decision.consent).toBe(true);
         expect(body.decision.values[fieldId]).toBe("Anna Andersson");
         expect(body.decision.documentSetHash).toBe("a".repeat(64));
@@ -424,7 +425,7 @@ test("public recipient: document review and explicit approval, no account requir
           data: {
             title: "Kundavtal",
             message: "Läs igenom avtalet.",
-            status: "sent",
+            status: approved ? "completed" : "sent",
             snapshotHash: "a".repeat(64),
             expiresAt: "2099-01-01T00:00:00Z",
             waiting: false,
@@ -432,7 +433,7 @@ test("public recipient: document review and explicit approval, no account requir
               id: recipient,
               name: "Anna Andersson",
               method: "email_approval",
-              status: "pending",
+              status: approved ? "signed" : "pending",
             },
             fields: [
               {
@@ -462,6 +463,8 @@ test("public recipient: document review and explicit approval, no account requir
   await page.getByRole("button", { name: "Öppna dokument" }).click();
   await expect(page.getByText("Öppnat", { exact: true })).toBeVisible();
   await page.getByLabel("Ditt namn *", { exact: true }).fill("Anna Andersson");
+  await page.getByLabel("Fullständigt namn *",{exact:true}).fill("Anna Andersson");
+  await page.getByLabel("Personnummer (ÅÅÅÅMMDDNNNN) *",{exact:true}).fill("199001010017");
   await page.getByRole("checkbox").check();
   await page
     .getByRole("button", { name: "Godkänn avtal", exact: true })
@@ -470,6 +473,10 @@ test("public recipient: document review and explicit approval, no account requir
     page.getByRole("heading", { name: "Ditt godkännande är registrerat." }),
   ).toBeVisible();
   expect(approved).toBe(true);
+  await page.reload();
+  await expect(page.getByRole("heading",{name:"Avtalet är färdigt",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Hämta bevisarkiv",exact:true})).toBeEnabled();
+  await expect(page.getByRole("button",{name:"Hämta signerat kundavtal.pdf",exact:true})).toBeEnabled();
   await page.screenshot({
     path: ".verification/recipient-approved.png",
     fullPage: true,

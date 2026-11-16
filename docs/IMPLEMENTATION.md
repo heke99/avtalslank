@@ -117,3 +117,6 @@ Ten runtime controls implemented: validated config, live/ready health separation
 
 ## Production configuration and controlled invitation
 Existing Railway environment is now production; dedicated keys provisioned by operator. Verified actual private Storage/ClamAV/qpdf/database scan, live Edge send and matching worker/Edge key fingerprint, idempotent send replay, Resend delivered invitation to explicitly authorized recipient, real signer view/download and invalid/unauthenticated HTTP401. Local npm run verify PASS. No general signing activation: recipient approval and final archive verification remain pending. Domain move from OPS requested but blocked by missing Vercel move capability and unauthenticated browser; current addresses preserved. [Operational evidence](work/production-signing-verification.md).
+
+## Signer evidence and completion iteration
+Steps1–2: immutable declared identity/server-time/hash evidence; paginated PDF receipt; verified archive/checksums; participant evidence download; transactional completion email; recipient status polling and final downloads. No retroactive edits to signed documents, no identity verification claims from personal-number checksum, no fabricated client IP. Local103 tests and build/type gates pass. [Work and evidence](work/signer-receipt-and-completion.md).

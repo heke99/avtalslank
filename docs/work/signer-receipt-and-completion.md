@@ -1,0 +1,15 @@
+# Signer receipt, evidence verification and completion
+
+Scope: user-authorized steps1–2; full name, Swedish personal number, signing hash, network observation and server time on downloaded PDFs. Existing completed PDFs are immutable and are not rewritten. No eID/provider or billing activation.
+
+Implemented: service-only al_signer_decide wrapper validates identity and delegates consent/replay/locking to existing signer command. Full name/12-digit personal number (calendar/Luhn only) are self-declared; no claim of eID verification. Immutable private signer_evidence includes server consumed_at, frozen snapshot digest, recipient/method, SHA256 over Postgres JSONB evidence+decision, and nullable explicitly unverified forwarded IP. Request JSON cannot choose network/time/hash. Replays preserve initial evidence. Public API never returns another case or a raw private Storage path.
+
+Receipt uses bounded wrapped paginated lines, preserving WinAnsi names normally and unsupported characters as explicit Unicode escapes; exact Unicode also remains in decisions JSON. Each PDF records every signer; new evidence survives into archive decisions. Legacy PDFs show only previously recorded metadata. No self-referential final-file hash is claimed; final byte digest is in result/manifest.
+
+Archive defect fixed: new archives include checksums.sha256 and run verifyEvidenceZip before Storage publication. Manifest/original/final/decision checks run in the integrated PostgreSQL+worker test. Existing legacy archive remains immutable; validation results are appended after live download.
+
+Completion: transactional trigger creates one unique completion outbox effect per signed recipient after finalization. Uses same lease/idempotency/uncertain-outcome handling as invitations. Email contains the existing personal link, not documents or personal numbers. Recipient UI polls status after approval, shows final state and PDF/ZIP downloads on completion and after reopening. Recipient archive remains limited to a signed, unexpired, unrevoked link for that case. No credentials from another product or new operator credential used.
+
+Migration source filename aligned to actual hosted20261116223753; SQL unchanged after application. Supabase API rollout recorded below. Local npm run verify passed103 tests, Edge/web/worker types,18 provenance ports and production build/prerender/OpenAPI. Existing browser happy path extended for declared identity and completion on reload. CI and actual release results pending at initial checkpoint. Previous live signed test remains without newly requested personal number or IP; these cannot be retroactively attributed.
+
+Privacy disclosure: signer form and privacy page explain the declaration, recipients of the PDF/archive, server timestamp, non-independent time and unverified network observation. No personal number in email subject/body or runtime logs. BankID/Freja/drawn capability and billing stay disabled. Auth advisor warns leaked-password protection is off; no new database security finding is inferred from that Auth setting.

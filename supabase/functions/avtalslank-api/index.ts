@@ -27,7 +27,7 @@ function requireId(v: unknown): string {
   if (typeof v !== "string" || !uuid.test(v)) throw new Error("INVALID_ID");
   return v;
 }
-const safeCodes = new Set(["CONTACT_IMPORT_LIMIT","INVALID_CONTACT_IMPORT","DUPLICATE_IMPORT_EMAIL",
+const safeCodes = new Set(["INVALID_SIGNER_IDENTITY","CONTACT_IMPORT_LIMIT","INVALID_CONTACT_IMPORT","DUPLICATE_IMPORT_EMAIL",
   "INVALID_SIGNING_LINK",
   "LINK_ALREADY_USED",
   "DOCUMENT_SET_CHANGED",

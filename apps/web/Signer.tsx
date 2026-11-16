@@ -1,3 +1,4 @@
+import { normalizePersonalNumber } from "../../packages/signing/src/identity";
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, friendlyError } from "./client";
 import { sha256Hex } from "../../packages/crypto/src/hash.ts";
@@ -37,6 +38,7 @@ export default function Signer() {
     [preview, setPreview] = useState<string | null>(null),
     [seen, setSeen] = useState<string[]>([]),
     [done, setDone] = useState("");
+  const [signedName,setSignedName]=useState(""),[personalNumber,setPersonalNumber]=useState("");
   const decision = useRef<unknown>(null);
   async function request(action: string, body: Record<string, unknown> = {}) {
     const response = await fetch(apiUrl + "/v1/signer/" + action, {
@@ -79,7 +81,7 @@ export default function Signer() {
     request("view")
       .then((r) => r.json())
       .then((r) => {
-        if (active) setData(r.data);
+        if (active) {setData(r.data);setSignedName(r.data.recipient.name??"");}
       })
       .catch((e) => {
         if (active) showError(e);
@@ -97,6 +99,11 @@ export default function Signer() {
     },
     [preview],
   );
+  useEffect(()=>{
+    if(!data || data.recipient.status!=="signed" || !["sent","in_progress","finalizing"].includes(data.status))return;
+    let active=true;const timer=setInterval(()=>{request("view").then(r=>r.json()).then(r=>{if(active)setData(r.data);}).catch(()=>{});},5000);
+    return ()=>{active=false;clearInterval(timer);};
+  },[data?.status,data?.recipient.status]);
   async function openDocument(doc: SignerData["documents"][number]) {
     setBusy(true);
     setError("");
@@ -120,6 +127,10 @@ export default function Signer() {
     setBusy(true);
     setError("");
     // Freeze the first submitted decision for exact retry after an unknown response.
+    if (!decision.current && intent === "approve") {
+      try {normalizePersonalNumber(personalNumber);if(signedName.trim().length<2)throw Error("INVALID_SIGNER_IDENTITY");}
+      catch {setError("Ange fullständigt namn och ett giltigt personnummer med tolv siffror (ÅÅÅÅMMDDNNNN).");setBusy(false);return;}
+    }
     if (!decision.current)
       decision.current = {
         intent,
@@ -127,11 +138,13 @@ export default function Signer() {
         consentVersion: "email-approval-v1",
         consent: !!consent,
         values: intent === "approve" ? values : {},
+        ...(intent === "approve" ? {identity:{name:signedName.trim(),personalNumber:normalizePersonalNumber(personalNumber)}} : {}),
         ...(intent === "decline" ? { reason } : {}),
       };
     try {
       const response = await request("decide", { decision: decision.current });
       const r = await response.json();
+      setData({...data,recipient:{...data.recipient,status:r.data.status},status:r.data.envelopeStatus??data.status});
       setDone(
         r.data.status === "signed"
           ? "Ditt godkännande är registrerat."
@@ -151,11 +164,11 @@ export default function Signer() {
   async function downloadFinal(documentId: string) {
     setBusy(true);
     try {
-      const r = await request("final", { documentId });
+      const r = await request(documentId === "evidence" ? "evidence" : "final", { documentId });
       const url = URL.createObjectURL(await r.blob());
       const a = document.createElement("a");
       a.href = url;
-      a.download = "signerat-avtal.pdf";
+      a.download = documentId === "evidence" ? "bevisarkiv.zip" : "signerat-avtal.pdf";
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
@@ -201,6 +214,8 @@ export default function Signer() {
               {data.status === "completed" &&
                 data.recipient.status === "signed" && (
                   <div className="operation-tools">
+                    <h2>Avtalet är färdigt</h2><p>Hämta slutdokumentet eller bevisarkivet. En bekräftelse skickas också via e-post.</p>
+                    <button className="secondary" disabled={busy} onClick={()=>downloadFinal("evidence")}>Hämta bevisarkiv</button>
                     {data.documents.map((doc) => (
                       <button
                         className="secondary"
@@ -219,7 +234,7 @@ export default function Signer() {
               {done ? (
                 <div role="status">
                   <h2>{done}</h2>
-                  <p>Avsändaren kan följa avtalets status i Avtalslänk.</p>
+                  <p>{data.status === "completed" ? "Slutdokumentet är klart att hämta ovan." : "Vi inväntar övriga mottagare eller framställer slutdokumentet. Sidan uppdateras automatiskt."}</p>
                 </div>
               ) : data.recipient.status !== "pending" ? (
                 <p role="status">
@@ -269,6 +284,9 @@ export default function Signer() {
                       disabled={busy || Boolean(decision.current)}
                       className="signer-fields"
                     >
+                      <label>Fullständigt namn *<input autoComplete="name" required maxLength={120} value={signedName} onChange={e=>setSignedName(e.target.value)}/></label>
+                      <label>Personnummer (ÅÅÅÅMMDDNNNN) *<input inputMode="numeric" required maxLength={13} value={personalNumber} onChange={e=>setPersonalNumber(e.target.value)}/></label>
+                      <p>Uppgifterna anges av dig och verifieras inte med e-legitimation. Namn och personnummer tas med i det signerade dokumentet och bevisarkivet. Tidpunkt och eventuell vidarebefordrad IP-adress registreras också.</p>
                       {data.fields.map((f) => (
                         <label key={f.id}>
                           {f.label}

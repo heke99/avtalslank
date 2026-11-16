@@ -1,3 +1,4 @@
+import { normalizePersonalNumber, forwardedNetwork } from "../../../packages/signing/src/identity.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.110.7";
 import { sha256Hex } from "../../../packages/crypto/src/hash.ts";
 import { randomToken } from "../../../packages/crypto/src/tokens.ts";
@@ -55,7 +56,7 @@ export async function publicSigning(
   path: string,
   db: SupabaseClient,
 ) {
-  const match = path.match(/^\/v1\/signer\/(view|document|decide|final)$/);
+  const match = path.match(/^\/v1\/signer\/(view|document|decide|final|evidence)$/);
   if (!match) return null;
   if (req.method !== "POST") throw Error("INVALID_BODY");
   const body = JSON.parse(
@@ -73,7 +74,7 @@ export async function publicSigning(
     payload =
       action === "decide"
         ? body.decision
-        : action === "document" || action === "final"
+        : action === "evidence" ? { documentId: "evidence" } : action === "document" || action === "final"
           ? { documentId: requireId(body.documentId) }
           : {};
   if (
@@ -84,23 +85,30 @@ export async function publicSigning(
       JSON.stringify(payload).length > 12000)
   )
     throw Error("INVALID_DECISION");
+  if(action === "decide") {
+    if(payload.intent === "approve") {
+      if(!payload.identity || typeof payload.identity.name !== "string" || payload.identity.name.trim().length<2 || payload.identity.name.length>120)throw Error("INVALID_SIGNER_IDENTITY");
+      payload.identity={name:payload.identity.name.trim(),personalNumber:normalizePersonalNumber(String(payload.identity.personalNumber??""))};
+    }
+    return {data:await call(db,"al_signer_decide",{p_hash:await sha256Hex(body.token),p_payload:payload,p_network:forwardedNetwork(req.headers)})};
+  }
   const data = await call(db, "al_signer_command", {
     p_hash: await sha256Hex(body.token),
-    p_action: action,
+    p_action: action === "evidence" ? "final" : action,
     p_payload: payload,
   });
-  if (action === "document" || action === "final") {
+  if (action === "document" || action === "final" || action === "evidence") {
     const { data: file, error } = await db.storage
-      .from(action === "final" ? "al-final-documents" : "al-documents")
-      .download(action === "final" ? data.path : data.storage_path);
+      .from(action !== "document" ? "al-final-documents" : "al-documents")
+      .download(action !== "document" ? data.path : data.storage_path);
     if (error) throw error;
     const bytes = new Uint8Array(await file.arrayBuffer());
     if ((await sha256Hex(bytes)) !== data.sha256)
       throw Error("ORIGINAL_CHANGED");
     return new Response(bytes, {
       headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": 'inline; filename="document.pdf"',
+        "Content-Type": action === "evidence" ? "application/zip" : "application/pdf",
+        "Content-Disposition": action === 'evidence' ? 'attachment; filename="bevisarkiv.zip"' : 'inline; filename="document.pdf"',
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
       },
