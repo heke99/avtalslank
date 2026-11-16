@@ -10,7 +10,7 @@ MFA and reauthentication use the installed Supabase SDK. MFA enrollment is optio
 
 Verification: actual PostgreSQL app roles/negative cases and hosted rollback smoke for new RPCs; browser tests for invitations, account controls, reminders and filters. Production provider/Auth paths are separately identified; no real mail/payment test.
 
-Status: implementation complete, verification/release in progress.
+Status: all ten implementation parts complete; local/CI/hosted verification passed. Production signing and real Auth delivery remain conditional on the prerequisites below.
 
 No new donor code was imported. All ten features extend Avtalslänk's existing UI, actor/organization controls, audit and durable outbox. The original 18 pinned ports remain unchanged.
 
@@ -39,3 +39,14 @@ CI 43841774864: 62 code/database tests and worker-container checks passed; 13/15
 Provider/Auth browser tests use network doubles. PostgreSQL tests run the actual migration and roles; the hosted smoke runs against the real Supabase project and rolls back synthetic data. These are distinct forms of evidence.
 
 CI 43842202287 passed 14/15 browser scenarios; the remaining status filter label included its option text. Added an explicit accessible name to the select and updated that scenario. All existing signing/reminder/MFA/account scenarios pass. Final rerun pending.
+
+## Final release evidence
+
+Verified code commit: 9a7ae8d117307efd83d200755f369ebc7e59c8fa.
+[CI run 43842681609](https://github.com/heke99/avtalslank/actions/runs/43842681609): SUCCESS. 62 code/database tests, 15 Chromium scenarios and worker-container job all passed. Web, worker and Edge TypeScript checks, production Vite build and 18 pinned donor provenance checks passed. Two earlier browser-selector failures are resolved; no checks were removed or weakened.
+
+Web deployment dpl_13e4V9yeh8LiYSbrJTqza7hLMFh6 READY at that commit. Stable address: https://avtalslank.vercel.app. API v7 ACTIVE; database migration applied. Post-smoke verification found zero synthetic users/invitations remaining; ordinary authenticated clients have neither team-command execution nor private invitation-table SELECT. Supabase security advisor returned zero findings. Existing avtalslank.se/OPS DNS was not cut over.
+
+Release verdict: this account/operations code is implemented and verified at the levels above. NOT a verified live signing service: Railway worker has no dedicated credentials/deployment, real ClamAV/Resend delivery is unverified, avtalslank.se sender is not configured, and BankID/Freja/drawn signing remain disabled. Email signing also remains disabled live. Real Auth enrollment/email verification/nonce delivery and project redirect/secure-password settings require controlled verification. No real recipient email, charge, provider signature or user-account MFA change was performed.
+
+Next exact work: provision Avtalslänk's own runtime/scanner/shared signing key and verified sender; configure Auth redirects and password protection; run controlled real account and signing flows. Activate each signing capability only after its actual delivery/evidence path passes. Billing remains unconfigured, with no selected subscription/document price or payment provider.
