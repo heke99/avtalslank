@@ -9,6 +9,8 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
   let invitations: Array<Record<string, unknown>> = [];
   await page.addInitScript(
     ({ ref }) => {
+      if (sessionStorage.getItem("al.ui.seeded")) return;
+      sessionStorage.setItem("al.ui.seeded", "1");
       localStorage.setItem(
         `sb-${ref}-auth-token`,
         JSON.stringify({
@@ -624,7 +626,7 @@ test('account reauthentication, password confirmation and global signout use Aut
  await page.getByRole('button',{name:'Inställningar',exact:true}).click();await page.getByRole('button',{name:'Skicka verifieringskod',exact:true}).click();
  await expect(page.getByLabel('Verifieringskod från e-post')).toBeVisible();expect(reauth).toBe(true);await page.getByLabel('Verifieringskod från e-post').fill('123456');await page.getByLabel('Nytt lösenord',{exact:true}).fill('strong-test-password');await page.getByLabel('Bekräfta nytt lösenord').fill('different-password');await page.getByRole('button',{name:'Spara nytt lösenord'}).click();await expect(page.getByRole('status')).toContainText('stämmer inte');expect(changed).toBe(false);
  await page.getByLabel('Bekräfta nytt lösenord').fill('strong-test-password');await page.getByRole('button',{name:'Spara nytt lösenord'}).click();await expect(page.getByRole('status')).toContainText('Lösenordet är ändrat');expect(changed).toBe(true);
- page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Logga ut från alla enheter'}).click();await expect(page.getByRole('heading',{name:'Logga in',exact:true})).toBeVisible();expect(global).toBe(true);
+ page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Logga ut från alla enheter'}).click();await expect(page.getByRole('heading',{name:'Logga in',exact:true})).toBeVisible();expect(global).toBe(true);expect(await page.evaluate(ref=>localStorage.getItem(`sb-${ref}-auth-token`),ref)).toBeNull();
 });
 test('MFA enrollment sends challenge and code to Supabase, not application database',async({page})=>{
  await workspace(page);let verified=false;
