@@ -136,7 +136,7 @@ export function RecipientTools({
           </label>
           <label>
             Signeringsmetod
-            <select name="method" defaultValue={r.method}>
+            <select name="method" aria-label="Signeringsmetod" defaultValue={r.method}>
               {Object.entries(methodLabels).map(([k, v]) => (
                 <option value={k} key={k}>
                   {v}

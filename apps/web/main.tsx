@@ -1360,7 +1360,7 @@ function EnvelopeDetail({
                 </div>
                 <label>
                   Signeringsmetod
-                  <select name="method">
+                  <select name="method" aria-label="Signeringsmetod">
                     {Object.entries(methodLabels).map(([key, label]) => (
                       <option key={key} value={key}>
                         {label}

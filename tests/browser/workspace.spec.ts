@@ -184,7 +184,7 @@ test("desktop workspace: draft, Freja selection, readiness block, fields, billin
     .getByLabel("Signeringsmetod", { exact: true })
     .selectOption("freja");
   await page.getByRole("button", { name: "Lägg till mottagare" }).click();
-  await expect(page.getByText("Freja eID", { exact: true })).toBeVisible();
+  await expect(page.locator(".method-label")).toHaveText("Freja eID");
   await page.getByRole("button", { name: /Granska & skicka/ }).click();
   await expect(
     page.getByRole("button", { name: "Skicka för signering" }),
