@@ -54,8 +54,10 @@ export function JoinInvitation({ session, children }: {
         const v = JSON.parse(localStorage.getItem('al.join') ?? '{}');
         if (v.until > Date.now() && /^[a-f0-9]{64}$/.test(v.token))
             saved = v.token;
+
     }
     catch { }
+    useEffect(()=>{try{const v=JSON.parse(localStorage.getItem('al.join')??'{}');if(v.until && v.until<=Date.now())localStorage.removeItem('al.join');}catch{localStorage.removeItem('al.join');}},[]);
     const invitation = /^[a-f0-9]{64}$/.test(token) ? token : saved;
     return <><section className="panel detail-panel"><h1>Inbjudan till Avtalslänk</h1><p>Logga in med e-postadressen som inbjudan skickades till. Ett nytt konto behöver verifieras via e-post.</p>{op.message && <p role="alert">{op.message}</p>}{session && <><p>Inloggad som {session.user.email}</p><button className="primary" disabled={op.busy || !invitation} onClick={() => op.run(async () => { await accountApi('/v1/team/accept', null, { token: invitation }); localStorage.removeItem('al.join'); location.replace('/'); })}>Acceptera inbjudan</button><button className="secondary" onClick={() => op.run(async () => { const r = await supabase.auth.signOut({ scope: 'local' }); if (r.error)
         throw r.error; })}>Byt konto</button></>}{!invitation && <p role="alert">Inbjudningslänken saknas. Öppna länken du fick.</p>}</section>{!session && children}</>;
@@ -92,7 +94,7 @@ export function AccountSecurity() {
         throw r.error; setNonceSent(false); op.setMessage('Lösenordet är ändrat.'); }); }}><label>Verifieringskod från e-post<input name="nonce" autoComplete="one-time-code" required/></label><label>Nytt lösenord<input name="password" type="password" minLength={12} maxLength={128} autoComplete="new-password" required/></label><label>Bekräfta nytt lösenord<input name="confirm" type="password" minLength={12} maxLength={128} autoComplete="new-password" required/></label><button className="primary" disabled={op.busy}>Spara nytt lösenord</button></form>}
  <h3>Aktiva sessioner</h3><button className="secondary" disabled={op.busy} onClick={() => { if (confirm('Logga ut från alla enheter?'))
         op.run(async () => { const r = await supabase.auth.signOut({ scope: 'global' }); if (r.error)
-            throw r.error; }); }}>Logga ut från alla enheter</button><p className="muted">Utloggning stoppar förnyelse av sessioner. Redan utfärdade åtkomsttoken gäller tills de löper ut.</p></section>;
+            throw r.error; location.assign('/login'); }); }}>Logga ut från alla enheter</button><p className="muted">Utloggning stoppar förnyelse av sessioner. Redan utfärdade åtkomsttoken gäller tills de löper ut.</p></section>;
 }
 export function OperationalStatus({ orgId }: {
     orgId: string;

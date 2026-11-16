@@ -13,3 +13,5 @@ Run npm run verify; run real two-tenant SQL/RLS and browser tests for changed su
 Use docs/engineering/AGENTS.md and docs/engineering/docs/ENGINEERING_STANDARD.md for all future work. Preserve the Avtalslänk-specific rules above. Current implementation and evidence live in docs/IMPLEMENTATION.md; active signing work is tracked in docs/work/signing-v1.md. Never describe a pure module test as a verified production signing flow.
 
 Active account/operations iteration: docs/work/account-operations.md. Preserve earlier signing-v1 evidence; do not treat mocked Auth responses as live MFA proof.
+
+Public entry and launch scope: docs/work/public-launch.md. Planned Start/Team/API choices are user-declared interest only. Never derive billing, quotas or permissions from signup metadata. Public DPA information is not a concluded processor agreement; live document processing retains its launch gates.

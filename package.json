@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node --import tsx scripts/prerender-public.tsx && node scripts/verify-public-build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "verify": "npm run verify:provenance && npm run typecheck:edge && npm run test && npm run build",

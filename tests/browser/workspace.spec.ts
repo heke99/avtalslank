@@ -260,7 +260,7 @@ test("responsive workspace has no horizontal page overflow and menu works", asyn
 test("login page and invalid signer link never fabricate signed status", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/login");
   await expect(page.getByRole("heading", { name: "Logga in" })).toBeVisible();
   await page.screenshot({ path: ".verification/login.png", fullPage: true });
   await page.goto("/s/invalid-token");

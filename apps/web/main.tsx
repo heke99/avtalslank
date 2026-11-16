@@ -1,3 +1,6 @@
+import {PublicSite} from "./PublicSite";
+import {publicPaths,selectedPlan,signupMetadata,plans,legalVersion} from "../../packages/public-site/src/index";
+import "./public.css";
 import {AccountSecurity,OperationalStatus,JoinInvitation,RemindRecipient} from "./AccountOperations";
 import {activityLabel} from "../../packages/domain/src/activity";
 import React, { useEffect, useState, useRef } from "react";
@@ -217,6 +220,8 @@ function App() {
         <p>Öppnar din arbetsyta…</p>
       </div>
     );
+  const publicPath=location.pathname.replace(/\/$/,"")||"/";
+  if(publicPaths.includes(publicPath as typeof publicPaths[number]) && (publicPath!=="/"||!session)) return <PublicSite path={publicPath} requestedVersion={new URLSearchParams(location.search).get("version")}/>;
   if (location.pathname.startsWith("/s/")) return <Signer />;
   if (location.pathname === "/reset-password")
     return <PasswordReset session={session} onError={notify} notice={notice} />;
@@ -866,9 +871,10 @@ function Auth({
   notice: string;
   onError: (e: unknown) => void;
 }) {
-  const [mode, setMode] = useState<"login" | "register" | "reset">("login"),
+  const [mode, setMode] = useState<"login" | "register" | "reset">(location.pathname==="/signup"?"register":"login"),
     [busy, setBusy] = useState(false),
-    [success, setSuccess] = useState("");
+    [success, setSuccess] = useState(""),
+    [plan,setPlan]=useState(selectedPlan(new URLSearchParams(location.search).get("plan"))??"");
   return (
     <div className="auth-layout">
       <div className="auth-main">
@@ -923,7 +929,7 @@ function Auth({
                       ? await supabase.auth.signUp({
                           email,
                           password,
-                          options: { emailRedirectTo: location.origin+(location.pathname.startsWith("/join")?"/join/":"") },
+                          options: { emailRedirectTo: location.origin+(location.pathname.startsWith("/join")?"/join/":""),data:signupMetadata(plan,f.get("terms")==="on") },
                         })
                       : await supabase.auth.resetPasswordForEmail(email, {
                           redirectTo: location.origin + "/reset-password",
@@ -975,6 +981,11 @@ function Auth({
                 </div>
               </label>
             )}
+            {mode==="register"&&<>
+              <label>Önskat upplägg<select value={plan} onChange={e=>setPlan(e.target.value)} aria-label="Önskat upplägg"><option value="">Jag väljer senare</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+              <p className="auth-plan">Planvalet är ett önskemål. Inget betalt abonnemang, ingen bindningstid och ingen debitering startar vid registrering.</p>
+              <div className="auth-legal"><label><input name="terms" type="checkbox" required/><span>Jag företräder ett företag och accepterar <a href={"/villkor?version="+legalVersion} target="_blank" rel="noopener">allmänna villkor för kontot</a> (version {legalVersion}).</span></label><p>Så använder vi dina uppgifter: <a href="/integritet" target="_blank" rel="noopener">integritetspolicy</a>. Detta är information, inte ett samtycke till marknadsföring.</p></div>
+            </>}
             <button className="primary full" disabled={busy || !configured}>
               {busy
                 ? "Ett ögonblick…"
@@ -986,6 +997,7 @@ function Auth({
               <ArrowRight size={17} />
             </button>
           </form>
+          <div className="auth-public-links"><a href="/">Till startsidan</a><a href="/abonnemang">Abonnemang</a><a href="/integritet">Integritet</a><a href="/cookies">Cookies</a><a href="/villkor">Villkor</a></div>
           <div className="auth-links">
             {mode === "login" ? (
               <>
@@ -1949,4 +1961,9 @@ function SettingsView({
     </div>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+function Root(){
+  const path=location.pathname.replace(/\/$/,"")||"/";
+  if(path!=="/"&&publicPaths.includes(path as typeof publicPaths[number]))return <PublicSite path={path} requestedVersion={new URLSearchParams(location.search).get("version")}/>;
+  return <App/>;
+}
+createRoot(document.getElementById("root")!).render(<Root />);
