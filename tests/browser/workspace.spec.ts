@@ -258,7 +258,7 @@ test("desktop empty state uses real counts and provides a primary action", async
   await page.setViewportSize({ width: 1440, height: 1000 });
   await workspace(page);
   await expect(
-    page.getByText("Här börjar nästa överenskommelse."),
+    page.getByText("Inga avtal ännu"),
   ).toBeVisible();
   await page.screenshot({
     path: ".verification/desktop-workspace.png",
