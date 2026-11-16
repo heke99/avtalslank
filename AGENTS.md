@@ -15,3 +15,5 @@ Use docs/engineering/AGENTS.md and docs/engineering/docs/ENGINEERING_STANDARD.md
 Active account/operations iteration: docs/work/account-operations.md. Preserve earlier signing-v1 evidence; do not treat mocked Auth responses as live MFA proof.
 
 Public entry and launch scope: docs/work/public-launch.md. Planned Start/Team/API choices are user-declared interest only. Never derive billing, quotas or permissions from signup metadata. Public DPA information is not a concluded processor agreement; live document processing retains its launch gates.
+
+Active register/UI and workspace iteration: docs/work/register-and-workspace.md. CSV exports only the visible current-organization subset and neutralizes formula-like cells. MFA recovery targets unfinished app factors only; server Auth remains authoritative.

@@ -6,7 +6,7 @@ test('public hero, plans and legal navigation with no optional tracking or stora
         external.push(u.hostname); });
     await page.goto('/');
     await expect(page.locator('#public-main')).toHaveCSS('margin-left','0px');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mindre administration.Mer avtalat.');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Avtal, dokument\s*och mottagare\./);
     await expect(page.getByText('Konton och utkast är öppna.', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Skapa ditt företagskonto' })).toHaveAttribute('href', '/signup');
     await page.getByRole('button', { name: 'Cookieinställningar', exact: true }).click();
@@ -69,4 +69,10 @@ test('mobile navigation, plans and policy tables stay within viewport', async ({
     }
     await page.goto('/');
     await page.screenshot({ path: '.verification/public-home-mobile.png', fullPage: true });
+});
+test('guided product tour supports keyboard steps without requests or pretending to send',async({page})=>{
+ await page.goto('/');await expect(page.locator('.public-document')).toHaveCount(0);await page.getByRole('tab',{name:'01 Dokument',exact:true}).focus();await page.keyboard.press('ArrowRight');await expect(page.getByRole('tab',{name:'02 Mottagare',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('tabpanel')).toContainText('Bestäm vem');await page.getByRole('button',{name:'Nästa steg',exact:true}).click();await expect(page.getByRole('tabpanel')).toContainText('Granska innan');await expect(page.getByRole('button',{name:'Nästa steg',exact:true})).toBeDisabled();await expect(page.getByText('Inget skickas eller sparas.',{exact:false})).toBeVisible();
+});
+test('API examples switch language and copy the selected server example',async({page,context})=>{
+ await context.grantPermissions(['clipboard-read','clipboard-write']);await page.goto('/api');await page.getByLabel('Språk för API-exempel').selectOption('javascript');await expect(page.locator('.api-examples pre')).toContainText('process.env.AVTALSLANK_API_KEY');await page.getByRole('button',{name:'Kopiera API-exempel'}).click();await expect(page.getByRole('status')).toHaveText('Exemplet har kopierats.');expect(await page.evaluate(()=>navigator.clipboard.readText())).toContain('process.env.AVTALSLANK_API_KEY');await page.getByLabel('Språk för API-exempel').selectOption('python');await expect(page.locator('.api-examples pre')).toContainText('urllib.request');
 });

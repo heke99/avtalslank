@@ -1,3 +1,5 @@
+import GettingStarted from "./GettingStarted";
+import {filterAgreements,agreementCsv} from "../../packages/workspace/src/index";
 import {PublicSite} from "./PublicSite";
 import {publicPaths,selectedPlan,signupMetadata,plans,legalVersion} from "../../packages/public-site/src/index";
 import "./public.css";
@@ -129,9 +131,13 @@ function App() {
     [modal, setModal] = useState<"create" | "org" | null>(null),
     [selected, setSelected] = useState<Envelope | null>(null),
     [statusFilter,setStatusFilter]=useState(""),
+    [dateFrom,setDateFrom]=useState(""),[dateTo,setDateTo]=useState(""),[agreementSort,setAgreementSort]=useState<"latest"|"oldest"|"title">("latest"),
     [query, setQuery] = useState(""),
     [mobileMenu, setMobileMenu] = useState(false);
   const org = orgs.find((o) => o.id === orgId);
+  const displayedAgreements=filterAgreements(envelopes,{organizationId:orgId,query:view==='overview'?'':query,status:view==='overview'?'':statusFilter,from:view==='overview'?'':dateFrom,to:view==='overview'?'':dateTo,sort:view==='overview'?'latest':agreementSort}).slice(0,view==='overview'?5:100);
+  function exportAgreements(){const url=URL.createObjectURL(new Blob([agreementCsv(displayedAgreements,orgId,statusLabels)],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='avtalslank-avtal-'+orgId+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+
   const scope = useRef("");
   scope.current = `${session?.user.id ?? ""}:${orgId}`;
   function notify(error: unknown) {
@@ -192,6 +198,7 @@ function App() {
   }
   useEffect(() => {
     setSelected(null);
+    setEnvelopes([]);setTemplates([]);
     if (orgId) reload().catch(notify);
   }, [orgId]);
   async function action(fn: () => Promise<void>) {
@@ -397,6 +404,7 @@ function App() {
                   </button>
                 )}
               </div>
+              {view === "overview" && <GettingStarted key={orgId} orgId={orgId} envelopes={envelopes.filter(e=>e.organization_id===orgId).length} templates={templates.length} open={setView}/>}
               {view === "overview" && (
                 <>
                   <div className="stats">
@@ -480,6 +488,7 @@ function App() {
                       </label></>
                     )}
                   </div>
+                  {view==='agreements'&&<div className="agreement-controls"><label>Sortera avtal<select value={agreementSort} onChange={e=>setAgreementSort(e.target.value as typeof agreementSort)}><option value="latest">Senast uppdaterade</option><option value="oldest">Äldst uppdaterade</option><option value="title">Avtalsnamn A–Ö</option></select></label><label>Uppdaterad från<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Uppdaterad till<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><button className="secondary" onClick={()=>{setQuery('');setStatusFilter('');setDateFrom('');setDateTo('');setAgreementSort('latest');}}>Rensa filter</button><button className="secondary" disabled={!displayedAgreements.length} onClick={exportAgreements}>Exportera visade avtal (CSV)</button><p>{displayedAgreements.length} visade av {envelopes.filter(e=>e.organization_id===orgId).length} inlästa avtal. Högst 100 rader visas och exporteras. Datum avser svensk tid.</p>{dateFrom&&dateTo&&dateFrom>dateTo&&<p role="alert">Fråndatum behöver vara före eller samma dag som tilldatum.</p>}</div>}
                   {envelopes.length === 0 ? (
                     <Empty
                       icon={<FileText size={27} />}
@@ -497,6 +506,7 @@ function App() {
                     />
                   ) : (
                     <div className="table-wrap">
+                      {displayedAgreements.length===0&&<p className="filtered-empty" role="status">Inga avtal matchar filtren. Ändra urvalet eller rensa filtren.</p>}
                       <table>
                         <thead>
                           <tr>
@@ -507,14 +517,7 @@ function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {envelopes
-                            .filter(e=>view!=="agreements"||!statusFilter||e.status===statusFilter)
-                            .filter((e) =>
-                              e.title
-                                .toLocaleLowerCase("sv")
-                                .includes(query.toLocaleLowerCase("sv")),
-                            )
-                            .slice(0, view === "overview" ? 5 : 100)
+                          {displayedAgreements
                             .map((e) => (
                               <tr key={e.id}>
                                 <td>
