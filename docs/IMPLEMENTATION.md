@@ -1,5 +1,7 @@
 # Implementation checkpoint
 
+Current connected-signing release: see [signing-v1](work/signing-v1.md) and [operations](SIGNING_OPERATIONS.md). API v6 and the database/web integration are deployed. The original ten signing blocks are connected and ten recovery/delivery behaviors are implemented. Dedicated worker credentials/scanner/email sender are not configured; live signing and payment activation remain disabled. The sections below preserve earlier foundation evidence and limitations at those earlier checkpoints.
+
 This repository was initially empty. Implementation is isolated from source repositories and uses the existing Avtalslänk Supabase project.
 
 ## Ported sources

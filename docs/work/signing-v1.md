@@ -55,3 +55,10 @@ Cloud CI/browser and exact deployment records are appended after observing outco
 Railway staging document-worker was inspected: no variables, no source or deployment. The connector exposes only Supabase publishable keys, so this session cannot provision the worker's own server credential. Dedicated worker SUPABASE_SERVICE_ROLE_KEY, scanner host, Resend sending key/from-domain and shared SIGNING_LINK_SECRET still require secure provisioning. No donor credentials are reused. The connected database/API/web code can be delivered while email capabilities remain disabled.
 
 Next activation action: provision dedicated server variables using docs/SIGNING_OPERATIONS.md, deploy scanner/worker, verify live scanner and sender, then run a controlled signing journey before enabling email_approval. No permission to access another product's credentials is inferred from this requirement.
+
+## Observed release evidence
+
+- Code commit 602209b6d95d7c2188c62cf9934a79dff7bfecc2: [CI run 43837967913](https://github.com/heke99/avtalslank/actions/runs/43837967913) passed 58 code/database tests and nine Chromium scenarios, including public approval and sender recall.
+- Supabase Edge avtalslank-api v6 ACTIVE; health 200 and invalid recipient link 401 observed. Both connected migrations are applied; hosted two-tenant rollback smoke passed and advisors returned no findings.
+- Vercel deployment dpl_CjDwLVrVYEELxNyRVtYAWgDgLaQq READY at code commit 602209b6d95d7c2188c62cf9934a79dff7bfecc2; stable hostname https://avtalslank.vercel.app.
+- A separate CI worker-container job now builds the packaged image and verifies qpdf plus fail-closed unconfigured readiness. Its observed result is recorded after completion. No Railway worker deployment is claimed.
