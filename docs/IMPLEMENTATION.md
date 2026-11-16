@@ -88,3 +88,7 @@ Verified 36bcbee3ec6605c14da7c258ee64c4cdd6f22bc4 in CI 43908629372: 70 code/dat
 Customer-facing launch/build wording is replaced by ordinary service, quote and account-availability language. Actual capability/payment controls remain authoritative. Policy version 2026-11-16.2 preserves the earlier public documents as standalone archived HTML. No price or completed DPA is fabricated.
 
 New bounded API cursor listing and filters, shared timed HTTP client with GET-only retry, session startup recovery, dirty-draft navigation protection, upload stage feedback, filtered activity search/export and keyboard draft save are tracked in [work/production-ux-api.md](work/production-ux-api.md). Local suite: 74 code/database tests pass; hosted migration, Edge deployment and browser CI are next.
+
+## Production UX/API release evidence
+
+Verified 664f2f1fd39d39c01dc05dec1963733f0f364a0c in CI 43916171314: 74 code/database tests and 28 browser scenarios plus container/type/build/static/provenance checks passed. API v8 ACTIVE, production_api_queries applied, hosted two-tenant rollback smoke passed, security advisors zero findings, Vercel READY. Current customer pages omit build-stage wording; actual availability/payment gates remain intact. See [work/production-ux-api.md](work/production-ux-api.md) for the ten parts, archived policy versions and remaining external-runtime/provider verification.
