@@ -25,4 +25,8 @@ Webhook rotation cannot proceed while pending/running/reconcile deliveries exist
 
 Local npm run verify: 80 code/database tests passed, 18 provenance checks, Edge/web/worker TypeScript checks, production build and ten public prerenders. Five new PostgreSQL subscenarios include a real HTTP-adapter→RPC→database boundary; browser scenarios are separately run in CI with network doubles. Browser tests are not real Auth/provider evidence.
 
-Hosted migration/deployment/CI verification pending. Existing production API v8 and last verified code 664f2f1 remain the published baseline until the new release evidence is recorded here.
+Hosted account_security_controls migration applied. Expanded two-tenant server-role smoke passed and rolled back; zero synthetic users remain. Terms hash a866f2eb3f0ae8a3ae7765efac8a56e705763f56c38c042874de9613e6f390cf matches the served immutable HTML (HTTP200). Security advisor: zero findings. Direct authenticated execution of new security RPCs denied. API v9 ACTIVE; live health200, unauthenticated legal/key routes401. OpenAPI0.6.0 served200. Vercel dpl_9mjTdFA155MMhJa3dcgAMH6oJrYR READY at initial code6df28ed.
+
+Final review added expiry denial before a real cached mutation response and confirmed rejected-scope calls do not persist last-used timestamps. Fixed bulk-revoke UI availability: all-company revocation remains accessible even when the bounded list has no active entries. Browser status assertion targets the actual record instead of the similarly named select option. CI and final follow-up deployment results pending.
+
+First CI43922396991: 80 code/database tests and container checks passed; 29/31 browser scenarios passed. Two new scenarios had selector failures: status matched both select option and record, and plan label included nested option text. Narrowed the first to the record and gave the plan select an explicit accessible name; assertions remain intact. Full rerun required.

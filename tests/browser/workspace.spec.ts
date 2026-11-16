@@ -676,10 +676,11 @@ test('invalid upload gives a specific PDF error and resets the upload state for 
 
 test('key creation, filtering, atomic rotation presentation and bulk revocation',async({page})=>{
  await workspace(page);await page.getByRole('button',{name:'API & integration',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Återkalla alla nycklar',exact:true})).toBeEnabled();
  await page.getByLabel('Nyckelnamn').fill('Lagersystem');await page.getByLabel('Giltighetstid').selectOption('30');await page.getByRole('button',{name:'Skapa API-nyckel',exact:true}).click();
- await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Jag har sparat nyckeln'}).click();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toBeVisible();await page.screenshot({path:'.verification/security-keys-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'.verification/security-keys-mobile.png',fullPage:true});await page.setViewportSize({width:1280,height:900});await page.getByRole('button',{name:'Jag har sparat nyckeln'}).click();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toHaveCount(0);
  await page.getByLabel('Sök nyckel').fill('saknas');await expect(page.getByRole('button',{name:'Byt nyckel',exact:true})).toHaveCount(0);await page.getByLabel('Sök nyckel').fill('Lager');
- page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Byt nyckel',exact:true}).click();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toBeVisible();await page.getByLabel('Nyckelstatus').selectOption('revoked');await expect(page.getByText(/Återkallad/,{exact:false})).toBeVisible();
+ page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Byt nyckel',exact:true}).click();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toBeVisible();await page.getByLabel('Nyckelstatus').selectOption('revoked');await expect(page.locator('.list-row small').filter({hasText:'Återkallad'})).toBeVisible();
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Återkalla alla nycklar',exact:true}).click();await page.getByLabel('Nyckelstatus').selectOption('active');await expect(page.getByRole('button',{name:'Byt nyckel',exact:true})).toHaveCount(0);
 });
 test('terms acceptance is explicit, versioned and separate from plan interest and payment',async({page})=>{
