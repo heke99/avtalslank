@@ -41,3 +41,14 @@ CI run 43900677474: code/database/build checks passed, then browser installation
 CI 43901277310: 65 code/database tests, static build verification and worker-container passed. 18/19 browser scenarios passed, including all four new public scenarios. Global signout's fixture reinserted the synthetic session on every navigation, including the new /login redirect; changed fixture to seed once per tab, and explicitly assert the session key is absent after global signout. No production auth bypass was introduced and no assertion was removed. Final rerun pending.
 
 Live HTTP checks: /, /integritet, /cookies, /abonnemang returned prerendered HTML with expected content. /openapi.json returned JSON; favicon SVG, robots text and sitemap XML all returned correct content types and content. Public visual inspection showed centered desktop hero, planned Start/Team/API columns and readable cookie policy.
+
+## Final evidence and release verdict
+
+Verified code: c3f82f1a1afcaeebca7dc2f73106360766ee2f35.
+[CI 43901686204](https://github.com/heke99/avtalslank/actions/runs/43901686204): SUCCESS — 65 code/database tests, 19 Chromium scenarios, 18 pinned donor provenance checks, web/worker/Edge typechecks, Vite production build, ten prerendered public pages with build verification, and worker-container checks. No failing test was skipped. Global signout now proves the synthetic session stays absent after navigation; fixture no longer recreates it.
+
+Vercel deployment dpl_QBLjAzfA9cVGPGHjQWZpZQkJEB6R READY at that code commit. Public address https://avtalslank.vercel.app/. /abonnemang, /cookies and root navigation visually inspected in a live browser. Desktop and mobile screenshots are in the browser-verification CI artifact. Live HTTP verified public prerendered page bodies and correct JSON/SVG/text/XML asset types. Auth/signing routes additionally return X-Robots-Tag: noindex, nofollow. Existing avtalslank.se/OPS DNS remains unchanged.
+
+All ten public/account-entry parts are implemented and verified at these levels. Start/Team/API are planned commercial alternatives, with no decided price, purchased subscription, quota or billing activation. Account-terms/privacy/cookie information is scoped to the actual account/draft release. DPA annexes, transfer/retention details for live customer documents, real Auth email/redirect verification, dedicated worker/scanner/sender and provider signing remain release prerequisites. No real signup email, contract acceptance, recipient message, payment or provider signature was executed by this verification.
+
+Next work: complete dedicated runtime/Auth/email configuration and controlled live signup/signing verification; finalize processor/retention annexes before customer documents; add server-owned commercial acceptance and entitlements when pricing is decided. Never trust signup plan/acceptance metadata for permissions or charges.

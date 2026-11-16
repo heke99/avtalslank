@@ -70,3 +70,9 @@ Replaced promotional login and dashboard composition with a compact operational 
 Current account work and evidence are tracked in [work/account-operations.md](work/account-operations.md). Ten additions: invitation creation/revocation; invitation acceptance/account continuation; membership exit with last-owner protection and API-key revocation; TOTP enrollment/step-up with database and Edge AAL2 enforcement; nonce/password confirmation UI; global signout; rate-limited signing reminders; tenant-scoped operational status; Swedish activity labels; agreement status filtering. New Avtalslänk code reuses existing actor, tenant, audit and outbox primitives; no new donor imports.
 
 The historical pending list above predates connected signing-v1 and this iteration. Read work/signing-v1.md and work/account-operations.md for current status. Live provider signing, dedicated Railway/scanner/email credentials and real Auth delivery remain separate release requirements. No payment model or prices were selected; billing remains disabled.
+
+## Public entry and website (2026-11-16)
+
+Public home/hero, product journey, planned Start/Team/API comparison, plan-aware registration, API guide/OpenAPI download, privacy, necessary-only cookie information/settings, account terms, security/data-protection information, help/contact and FAQ are implemented. Ten public pages are prerendered with metadata, sitemap and robots. The signed-in workspace remains at root; signed-out root is public, with explicit /login and /signup. All evidence and commercial/legal launch boundaries are in [work/public-launch.md](work/public-launch.md).
+
+Verified c3f82f1a1afcaeebca7dc2f73106360766ee2f35 in CI 43901686204: 65 code/database tests, 19 browser scenarios, container and build checks passed. No new DB migration or signing capability activation. Planned plan selection is declared interest only; billing remains disabled.
