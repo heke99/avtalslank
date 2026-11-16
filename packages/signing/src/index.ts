@@ -280,7 +280,8 @@ export function signingInvitation(
     !url.pathname.startsWith("/s/") ||
     url.username ||
     url.password ||
-    url.hash ||
+    (url.hash !== "" &&
+      !(url.pathname === "/s/" && /^#token=[a-f0-9]{64}$/.test(url.hash))) ||
     !input.name.trim() ||
     !input.title.trim() ||
     !Number.isFinite(Date.parse(input.expiresAt))

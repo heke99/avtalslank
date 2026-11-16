@@ -25,6 +25,14 @@ export const friendlyError = (message: string) =>
       "Den valda signeringsmetoden är ännu inte aktiverad.",
     SIGNING_DELIVERY_NOT_CONFIGURED:
       "Utskick för signering är ännu inte aktiverat.",
+    SIGNING_WORKER_NOT_READY:
+      "Signeringstjänsten är inte redo. Ditt utkast är sparat.",
+    INVALID_FIELD_ASSIGNMENT:
+      "Kontrollera fältets dokument, sida och mottagare.",
+    INVALID_FIELDS: "Kontrollera dokumentfälten.",
+    FIELD_OUTSIDE_PAGE: "Fältet måste ligga inom dokumentets sida.",
+    FINAL_DOCUMENT_NOT_READY: "Slutdokumentet är inte klart ännu.",
+    DOCUMENT_TOTAL_LIMIT: "Dokumenten får tillsammans vara högst 50 MB.",
     DOCUMENT_REQUIRED: "Ladda upp en PDF först.",
     RECIPIENT_REQUIRED: "Lägg till minst en mottagare.",
     UPLOAD_NOT_FOUND: "Filen kunde inte hittas. Försök ladda upp den igen.",

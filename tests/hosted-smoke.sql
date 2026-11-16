@@ -43,4 +43,21 @@ do $$declare o uuid:=current_setting('al.smoke_org_a')::uuid;e uuid:=current_set
  perform public.al_remove_recipient(o,e,r);
 end $$;
 reset role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+set local role service_role;
+do $$declare o uuid:=current_setting('al.smoke_org_a')::uuid;e uuid:=current_setting('al.smoke_envelope_a')::uuid;s jsonb;begin
+ s:=public.al_flow_command('f8160001-0000-4000-8000-000000000001',null,o,e,'read');
+ if s->'envelope'->>'id'<>e::text then raise exception 'CONNECTED_READ_FAILED';end if;
+ s:=public.al_flow_command('f8160001-0000-4000-8000-000000000001',null,o,e,'fields',jsonb_build_object('generation',(s->'envelope'->>'generation')::int,'fields','[]'::jsonb));
+ begin
+  perform public.al_flow_command('f8160002-0000-4000-8000-000000000002',null,o,e,'read');raise exception 'CONNECTED_TENANT_LEAK';
+ exception when others then if sqlerrm<>'ACCESS_DENIED' then raise;end if;end;
+ begin
+  perform public.al_flow_command('f8160001-0000-4000-8000-000000000001',null,o,e,'send',jsonb_build_object('generation',(s->>'generation')::int));raise exception 'UNCONFIGURED_SEND_ALLOWED';
+ exception when others then if sqlerrm<>'SIGNING_METHOD_NOT_READY' then raise;end if;end;
+ begin
+  perform public.al_signer_command(repeat('0',64),'view');raise exception 'INVALID_LINK_ALLOWED';
+ exception when others then if sqlerrm<>'INVALID_SIGNING_LINK' then raise;end if;end;
+end $$;
+reset role;
 rollback;

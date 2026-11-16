@@ -1,3 +1,4 @@
+import { connectedRoute, publicSigning, boundedBytes } from "./connected.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.110.7";
 import { sha256Hex } from "../../../packages/crypto/src/hash.ts";
 import { randomToken } from "../../../packages/crypto/src/tokens.ts";
@@ -23,6 +24,24 @@ function requireId(v: unknown): string {
   return v;
 }
 const safeCodes = new Set([
+  "INVALID_SIGNING_LINK",
+  "LINK_ALREADY_USED",
+  "DOCUMENT_SET_CHANGED",
+  "WAITING_FOR_PREVIOUS_RECIPIENT",
+  "INVALID_DECISION",
+  "REQUIRED_FIELD",
+  "UNASSIGNED_FIELD",
+  "INVALID_FIELD_ASSIGNMENT",
+  "FINAL_DOCUMENT_NOT_READY",
+  "SIGNING_WORKER_NOT_READY",
+  "INVALID_LINKS",
+  "ORIGINAL_CHANGED",
+  "BODY_TOO_LARGE",
+  "INVALID_PDF",
+  "UPLOAD_CONFLICT",
+  "INVALID_WEBHOOK_CONFIGURATION",
+  "WEBHOOK_NOT_FOUND",
+  "DOCUMENT_TOTAL_LIMIT",
   "INVALID_ID",
   "INVALID_BODY",
   "INVALID_FIELDS",
@@ -87,6 +106,13 @@ Deno.serve(async (req: Request) => {
         status: "ok",
         billing: "unconfigured",
       });
+    const publicResult = await publicSigning(req, path, service);
+    if (publicResult instanceof Response) {
+      for (const [k, v] of Object.entries(headers))
+        if (!publicResult.headers.has(k)) publicResult.headers.set(k, v);
+      return publicResult;
+    }
+    if (publicResult) return response(publicResult);
     const auth = req.headers.get("authorization") ?? "";
     if (!auth.startsWith("Bearer "))
       return response({ error: { code: "AUTH_REQUIRED", requestId } }, 401);
@@ -98,20 +124,47 @@ Deno.serve(async (req: Request) => {
           global: { headers: { Authorization: auth } },
           auth: { persistSession: false, autoRefreshToken: false },
         });
+    let verifiedActor: string | null = null;
     if (!isApi) {
       const { data, error } = await client.auth.getUser(token);
       if (error || !data.user)
         return response({ error: { code: "AUTH_REQUIRED", requestId } }, 401);
+      verifiedActor = data.user.id;
     }
     let body: Record<string, unknown> = {};
-    if (req.method === "POST") {
-      const raw = await req.text();
+    if (
+      req.method === "POST" &&
+      req.headers.get("content-type")?.split(";")[0] !== "application/pdf"
+    ) {
+      const raw = new TextDecoder().decode(await boundedBytes(req, 65536));
       if (raw.length > 65536)
         return response({ error: { code: "BODY_TOO_LARGE", requestId } }, 413);
       body = JSON.parse(raw || "{}");
       if (!body || Array.isArray(body) || typeof body !== "object")
         throw new Error("INVALID_BODY");
     }
+    const connected = await connectedRoute(
+      req,
+      path,
+      service,
+      {
+        actor: verifiedActor,
+        keyHash: isApi ? await sha256Hex(token) : null,
+        organizationId: isApi
+          ? null
+          : ((body.organizationId ??
+              new URL(req.url).searchParams.get("organizationId")) as
+              | string
+              | null),
+      },
+      body,
+    );
+    if (connected instanceof Response) {
+      for (const [k, v] of Object.entries(headers))
+        if (!connected.headers.has(k)) connected.headers.set(k, v);
+      return connected;
+    }
+    if (connected) return response(connected);
     let action = "";
     let payload: Record<string, unknown> = {};
     let rpc = "";
@@ -410,13 +463,18 @@ Deno.serve(async (req: Request) => {
             : e instanceof SyntaxError
               ? "INVALID_JSON"
               : "REQUEST_FAILED";
-    const status = ["AUTH_REQUIRED", "INVALID_API_KEY"].includes(code)
+    const status = [
+      "AUTH_REQUIRED",
+      "INVALID_API_KEY",
+      "INVALID_SIGNING_LINK",
+    ].includes(code)
       ? 401
       : ["ACCESS_DENIED", "ADMIN_REQUIRED", "SCOPE_DENIED"].includes(code)
         ? 403
         : [
               "VERSION_CONFLICT",
               "IDEMPOTENCY_CONFLICT",
+              "LINK_ALREADY_USED",
               "ALREADY_EXISTS",
             ].includes(code)
           ? 409

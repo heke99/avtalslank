@@ -784,5 +784,913 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
       /DOCUMENT_LOCKED/,
     );
   });
+
+  const service = async () => actor(a, "service_role");
+  const flow = async (
+    id: string,
+    action: string,
+    payload: unknown = {},
+    org: string = oa,
+  ) =>
+    (
+      await one("select public.al_flow_command($1,null,$2,$3,$4,$5) data", [
+        a,
+        org,
+        id,
+        action,
+        payload,
+      ])
+    ).data;
+  let connected: string,
+    first: string,
+    second: string,
+    firstHash = "d".repeat(64),
+    secondHash = "e".repeat(64),
+    snapshot: any,
+    firstLink: string,
+    secondLink: string,
+    fieldId: string,
+    docId: string,
+    webhookId: string;
+  await t.test(
+    "connected preparation uses membership and only service orchestration",
+    async () => {
+      await actor(a);
+      connected = (
+        await one(
+          "select public.al_save_draft($1,'Connected signing','',true) data",
+          [oa],
+        )
+      ).data.id;
+      first = (
+        await one(
+          "select public.al_add_recipient($1,$2,'Signer One','first@example.invalid','email_approval',1) data",
+          [oa, connected],
+        )
+      ).data.id;
+      second = (
+        await one(
+          "select public.al_add_recipient($1,$2,'Signer Two','second@example.invalid','email_approval',2) data",
+          [oa, connected],
+        )
+      ).data.id;
+      await assert.rejects(
+        db.query("select public.al_flow_command($1,null,$2,$3,'read')", [
+          a,
+          oa,
+          connected,
+        ]),
+        /permission denied/,
+      );
+      await service();
+      await assert.rejects(flow(connected, "read", {}, ob), /ACCESS_DENIED/);
+      await assert.rejects(
+        db.query("select public.al_flow_command($1,null,$2,$3,'read')", [
+          b,
+          oa,
+          connected,
+        ]),
+        /ACCESS_DENIED/,
+      );
+      assert.equal((await flow(connected, "read")).envelope.id, connected);
+      const keyRead = "c".repeat(64);
+      await assert.rejects(
+        db.query(
+          "select public.al_flow_command(null,$1,null,$2,'authorize_upload')",
+          [keyRead, connected],
+        ),
+        /SCOPE_DENIED/,
+      );
+    },
+  );
+  await t.test(
+    "PDF registration through API stays pending scan; repeat ID is idempotent",
+    async () => {
+      await service();
+      docId = crypto.randomUUID();
+      const path = `${oa}/${connected}/${docId}.pdf`;
+      await db.exec("reset role");
+      await db.query(
+        "insert into storage.objects(bucket_id,name) values('al-documents',$1)",
+        [path],
+      );
+      await service();
+      const payload = {
+        id: docId,
+        name: "connected.pdf",
+        sha256: "a".repeat(64),
+        byteSize: 5,
+      };
+      assert.equal(
+        (await flow(connected, "register_document", payload)).status,
+        "pending_scan",
+      );
+      assert.equal(
+        (await flow(connected, "register_document", payload)).id,
+        docId,
+      );
+      await assert.rejects(
+        flow(connected, "register_document", {
+          ...payload,
+          sha256: "b".repeat(64),
+        }),
+        /UPLOAD_CONFLICT/,
+      );
+      await db.exec("reset role");
+      await db.query(
+        "update public.al_documents set status='ready',page_count=1 where id=$1",
+        [docId],
+      );
+      await service();
+    },
+  );
+  await t.test(
+    "document fields bind real same-envelope recipient and page; stale edits fail",
+    async () => {
+      await service();
+      fieldId = crypto.randomUUID();
+      const field = {
+        id: fieldId,
+        documentId: docId,
+        recipientId: first,
+        type: "text",
+        label: "Kundnamn",
+        required: true,
+        page: 0,
+        x: 0.1,
+        y: 0.1,
+        width: 0.4,
+        height: 0.05,
+      };
+      await assert.rejects(
+        flow(connected, "fields", {
+          generation: 1,
+          fields: [{ ...field, recipientId: b }],
+        }),
+        /INVALID_FIELD_ASSIGNMENT/,
+      );
+      await assert.rejects(
+        flow(connected, "fields", {
+          generation: 1,
+          fields: [{ ...field, page: 1 }],
+        }),
+        /INVALID_FIELD_ASSIGNMENT/,
+      );
+      assert.equal(
+        (await flow(connected, "fields", { generation: 1, fields: [field] }))
+          .generation,
+        2,
+      );
+      await assert.rejects(
+        flow(connected, "fields", { generation: 1, fields: [] }),
+        /VERSION_CONFLICT/,
+      );
+    },
+  );
+  await t.test(
+    "send fails closed without capability/worker; freezes snapshot and queues one sequential invitation",
+    async () => {
+      await service();
+      snapshot = await flow(connected, "read");
+      firstLink = crypto.randomUUID();
+      secondLink = crypto.randomUUID();
+      const payload = {
+        generation: 2,
+        snapshot,
+        links: [
+          { id: firstLink, recipientId: first, tokenHash: firstHash },
+          { id: secondLink, recipientId: second, tokenHash: secondHash },
+        ],
+        keyFingerprint: "f".repeat(64),
+      };
+      await assert.rejects(
+        flow(connected, "send", payload),
+        /SIGNING_METHOD_NOT_READY/,
+      );
+      await db.exec("reset role");
+      await db.exec(
+        "update al_private.capabilities set enabled=true where method='email_approval'",
+      );
+      await service();
+      await assert.rejects(
+        flow(connected, "send", payload),
+        /SIGNING_WORKER_NOT_READY/,
+      );
+      await db.query(
+        "select public.al_signing_worker('heartbeat',null,null,$1)",
+        [{ ready: true, keyFingerprint: "f".repeat(64) }],
+      );
+      webhookId = (
+        await one(
+          "select public.al_configure_webhook($1,$2,'https://example.com/hooks',$3) data",
+          [a, oa, "9".repeat(64)],
+        )
+      ).data.id;
+      const result = await flow(connected, "send", payload);
+      assert.equal(result.status, "sent");
+      assert.equal(
+        (await flow(connected, "send", payload)).snapshotHash,
+        result.snapshotHash,
+      );
+      await db.exec("reset role");
+      assert.equal(
+        (
+          await one(
+            "select count(*)::int n from al_private.signing_outbox where envelope_id=$1 and kind='invitation'",
+            [connected],
+          )
+        ).n,
+        1,
+      );
+      assert.equal(
+        (
+          await one(
+            "select count(*)::int n from al_private.signing_links where envelope_id=$1",
+            [connected],
+          )
+        ).n,
+        2,
+      );
+      await service();
+      await assert.rejects(
+        flow(connected, "fields", { generation: 2, fields: [] }),
+        /DOCUMENT_LOCKED/,
+      );
+    },
+  );
+  await t.test(
+    "signer projection hides other recipients, secrets and storage paths; ordering enforced",
+    async () => {
+      await service();
+      const view = (
+        await one("select public.al_signer_command($1,'view') data", [
+          firstHash,
+        ])
+      ).data;
+      assert.equal(view.recipient.id, first);
+      assert.equal(view.fields.length, 1);
+      assert.ok(!JSON.stringify(view).includes("second@example.invalid"));
+      assert.ok(!JSON.stringify(view).includes("storage_path"));
+      assert.ok(!JSON.stringify(view).includes(firstHash));
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'document',$2)", [
+          secondHash,
+          { documentId: docId },
+        ]),
+        /WAITING_FOR_PREVIOUS_RECIPIENT/,
+      );
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'view')", [
+          "0".repeat(64),
+        ]),
+        /INVALID_SIGNING_LINK/,
+      );
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'document',$2)", [
+          firstHash,
+          { documentId: b },
+        ]),
+        /DOCUMENT_NOT_FOUND/,
+      );
+    },
+  );
+  let firstDecision: any;
+  await t.test(
+    "approval binds frozen hash, required fields and exact retry; usage recorded once",
+    async () => {
+      await service();
+      const v = (
+        await one("select public.al_signer_command($1,'view') data", [
+          firstHash,
+        ])
+      ).data;
+      firstDecision = {
+        intent: "approve",
+        documentSetHash: v.snapshotHash,
+        consentVersion: "email-approval-v1",
+        consent: true,
+        values: { [fieldId]: "Test person" },
+      };
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'decide',$2)", [
+          firstHash,
+          { ...firstDecision, documentSetHash: "0".repeat(64) },
+        ]),
+        /DOCUMENT_SET_CHANGED/,
+      );
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'decide',$2)", [
+          firstHash,
+          { ...firstDecision, values: {} },
+        ]),
+        /REQUIRED_FIELD/,
+      );
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'decide',$2)", [
+          firstHash,
+          { ...firstDecision, values: { [b]: "foreign" } },
+        ]),
+        /UNASSIGNED_FIELD/,
+      );
+      assert.equal(
+        (
+          await one("select public.al_signer_command($1,'decide',$2) data", [
+            firstHash,
+            firstDecision,
+          ])
+        ).data.status,
+        "signed",
+      );
+      assert.equal(
+        (
+          await one("select public.al_signer_command($1,'decide',$2) data", [
+            firstHash,
+            firstDecision,
+          ])
+        ).data.status,
+        "signed",
+      );
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'decide',$2)", [
+          firstHash,
+          { ...firstDecision, values: { [fieldId]: "changed" } },
+        ]),
+        /LINK_ALREADY_USED/,
+      );
+      await db.exec("reset role");
+      assert.equal(
+        (
+          await one(
+            "select count(*)::int n from public.al_usage_events where event_key=$1",
+            ["signed:" + first],
+          )
+        ).n,
+        1,
+      );
+      assert.equal(
+        (
+          await one(
+            "select count(*)::int n from al_private.signing_outbox where effect_key=$1",
+            ["invite:" + second],
+          )
+        ).n,
+        1,
+      );
+      await service();
+    },
+  );
+  await t.test(
+    "last approval creates one durable finalization and does not prematurely complete envelope",
+    async () => {
+      await service();
+      const v = (
+        await one("select public.al_signer_command($1,'view') data", [
+          secondHash,
+        ])
+      ).data;
+      const decision = {
+        intent: "approve",
+        documentSetHash: v.snapshotHash,
+        consentVersion: "email-approval-v1",
+        consent: true,
+        values: {},
+      };
+      const r = (
+        await one("select public.al_signer_command($1,'decide',$2) data", [
+          secondHash,
+          decision,
+        ])
+      ).data;
+      assert.equal(r.envelopeStatus, "finalizing");
+      await db.exec("reset role");
+      assert.equal(
+        (
+          await one(
+            "select count(*)::int n from al_private.signing_outbox where envelope_id=$1 and kind='finalize'",
+            [connected],
+          )
+        ).n,
+        1,
+      );
+      await service();
+      await assert.rejects(
+        flow(connected, "download"),
+        /FINAL_DOCUMENT_NOT_READY/,
+      );
+    },
+  );
+  await t.test(
+    "worker leases fence late completion and accepted mail is not counted as document completion",
+    async () => {
+      await db.exec("reset role");
+      await db.query(
+        "update al_private.signing_outbox set status='cancelled' where envelope_id=$1 and kind<>'finalize'",
+        [connected],
+      );
+      await service();
+      const work = (await one("select public.al_signing_worker('claim') data"))
+        .data;
+      assert.equal(work.job.kind, "finalize");
+      await assert.rejects(
+        db.query("select public.al_signing_worker('finish',$1,$2,$3)", [
+          work.job.id,
+          crypto.randomUUID(),
+          { status: "completed", result: { files: [] } },
+        ]),
+        /LEASE_LOST/,
+      );
+      await assert.rejects(
+        db.query("select public.al_signing_worker('finish',$1,$2,$3)", [
+          work.job.id,
+          work.job.lease_token,
+          { status: "accepted" },
+        ]),
+        /INVALID_JOB_RESULT/,
+      );
+      await db.exec("reset role");
+      await db.query(
+        "update al_private.signing_outbox set lease_until=now()-interval '1 second' where id=$1",
+        [work.job.id],
+      );
+      await service();
+      const newer = (await one("select public.al_signing_worker('claim') data"))
+        .data;
+      assert.notEqual(newer.job.lease_token, work.job.lease_token);
+      await assert.rejects(
+        db.query("select public.al_signing_worker('finish',$1,$2,$3)", [
+          work.job.id,
+          work.job.lease_token,
+          { status: "failed" },
+        ]),
+        /LEASE_LOST/,
+      );
+      const files = [docId, "evidence"].map((documentId) => ({
+        documentId,
+        path: `${oa}/${connected}/${newer.job.lease_token}/${documentId}.${documentId === "evidence" ? "zip" : "pdf"}`,
+        sha256: "a".repeat(64),
+      }));
+      await db.exec("reset role");
+      for (const f of files)
+        await db.query(
+          "insert into storage.objects(bucket_id,name) values('al-final-documents',$1)",
+          [f.path],
+        );
+      await service();
+      await db.query("select public.al_signing_worker('finish',$1,$2,$3)", [
+        work.job.id,
+        newer.job.lease_token,
+        { status: "completed", result: { files } },
+      ]);
+      assert.equal((await flow(connected, "download")).files.length, 2);
+      await db.exec("reset role");
+      assert.equal(
+        (
+          await one("select status from public.al_envelopes where id=$1", [
+            connected,
+          ])
+        ).status,
+        "completed",
+      );
+      assert.equal(
+        (
+          await one(
+            "select count(*)::int n from public.al_usage_events where event_key=$1",
+            ["completed:" + connected],
+          )
+        ).n,
+        1,
+      );
+      await service();
+    },
+  );
+  await t.test(
+    "private signing tables and RPCs reject ordinary authenticated users",
+    async () => {
+      await actor(a);
+      for (const table of [
+        "signing_cases",
+        "signing_links",
+        "signing_outbox",
+        "webhook_secrets",
+      ])
+        await assert.rejects(
+          db.query("select * from al_private." + table),
+          /permission denied/,
+        );
+      for (const sql of [
+        "select public.al_signing_worker('claim')",
+        "select public.al_signer_command('fake','view')",
+      ])
+        await assert.rejects(db.query(sql), /permission denied/);
+    },
+  );
+
+  await t.test(
+    "connected HTTP handlers -> real PostgreSQL -> delivery worker -> recipient approval -> PDF evidence -> completed",
+    async () => {
+      const { connectedRoute, publicSigning } = await import(
+        "../supabase/functions/avtalslank-api/connected.ts"
+      );
+      const { processSigningJob } = await import("../apps/worker/signing.ts");
+      const { PDFDocument } = await import("pdf-lib");
+      const secret = "8".repeat(64),
+        config = {
+          secret,
+          publicOrigin: "https://avtalslank.test",
+          resendKey: "synthetic-key",
+          from: "signing@example.invalid",
+          domainVerified: true,
+        };
+      const oldDeno = (globalThis as any).Deno;
+      (globalThis as any).Deno = {
+        env: {
+          get: (name: string) =>
+            name === "SIGNING_LINK_SECRET" ? secret : undefined,
+        },
+      };
+      const objects = new Map<string, Uint8Array>();
+      let sentToken = "";
+      const client: any = {
+        rpc: async (name: string, args: Record<string, unknown> = {}) => {
+          try {
+            await service();
+            const keys = Object.keys(args);
+            if (
+              !/^[a-z_]+$/.test(name) ||
+              keys.some((k) => !/^[a-z_]+$/.test(k))
+            )
+              throw Error("UNSAFE_TEST_RPC");
+            const sql = `select public.${name}(${keys.map((k, i) => `${k} => $${i + 1}`).join(",")}) data`;
+            return {
+              data: (await one(sql, Object.values(args))).data,
+              error: null,
+            };
+          } catch (error) {
+            return { data: null, error };
+          }
+        },
+        storage: {
+          from: (bucket: string) => ({
+            upload: async (path: string, bytes: Uint8Array) => {
+              if (objects.has(bucket + "/" + path))
+                return { error: Error("EXISTS") };
+              objects.set(bucket + "/" + path, bytes);
+              await db.exec("reset role");
+              await db.query(
+                "insert into storage.objects(bucket_id,name) values($1,$2)",
+                [bucket, path],
+              );
+              await service();
+              return { data: { path }, error: null };
+            },
+            download: async (path: string) =>
+              objects.has(bucket + "/" + path)
+                ? {
+                    data: new Blob([
+                      new Uint8Array(objects.get(bucket + "/" + path)!),
+                    ]),
+                    error: null,
+                  }
+                : { data: null, error: Error("NOT_FOUND") },
+          }),
+        },
+      };
+      try {
+        await actor(a);
+        const envelope = (
+          await one(
+            "select public.al_save_draft($1,'Full connected journey') data",
+            [oa],
+          )
+        ).data;
+        const recipient = (
+          await one(
+            "select public.al_add_recipient($1,$2,'Synthetic Signer','signer@example.invalid','email_approval',1) data",
+            [oa, envelope.id],
+          )
+        ).data;
+        const identity = { actor: a, keyHash: null, organizationId: oa };
+        const route = (operation: string, body?: any) =>
+          connectedRoute(
+            new Request(
+              `https://api.test/v1/envelopes/${envelope.id}/${operation}?organizationId=${oa}`,
+              {
+                method: body ? "POST" : "GET",
+                headers: { "content-type": "application/json" },
+                ...(body ? { body: JSON.stringify(body) } : {}),
+              },
+            ),
+            `/v1/envelopes/${envelope.id}/${operation}`,
+            client,
+            identity,
+            body ?? {},
+          );
+        const pdf = await PDFDocument.create();
+        pdf.addPage([595, 842]);
+        const bytes = await pdf.save(),
+          documentId = crypto.randomUUID();
+        const uploaded: any = await connectedRoute(
+          new Request(
+            `https://api.test/v1/envelopes/${envelope.id}/documents?organizationId=${oa}&documentId=${documentId}&name=contract.pdf`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/pdf" },
+              body: new Uint8Array(bytes),
+            },
+          ),
+          `/v1/envelopes/${envelope.id}/documents`,
+          client,
+          identity,
+          {},
+        );
+        assert.equal(uploaded.data.status, "pending_scan");
+        // Synthetic scanner verdict: scanner process itself is an independently unverified runtime dependency.
+        await db.exec("reset role");
+        await db.query(
+          "update al_private.jobs set status='completed' where document_id<>$1",
+          [documentId],
+        );
+        await service();
+        const scan = (await client.rpc("al_claim_document_job")).data;
+        assert.equal(scan.document.id, documentId);
+        const scanResult = await client.rpc("al_finish_document_job", {
+          p_id: scan.id,
+          p_lease: scan.leaseToken,
+          p_report: {
+            sha256: await sha256Hex(bytes),
+            byteSize: bytes.length,
+            malware: "CLEAN",
+            pdf: "PASS",
+            pageCount: 1,
+          },
+        });
+        if (scanResult.error) throw scanResult.error;
+        const fid = crypto.randomUUID();
+        await route("fields", {
+          generation: 1,
+          fields: [
+            {
+              id: fid,
+              documentId,
+              recipientId: recipient.id,
+              label: "Name",
+              type: "text",
+              required: true,
+              page: 0,
+              x: 0.1,
+              y: 0.1,
+              width: 0.5,
+              height: 0.05,
+            },
+          ],
+        });
+        await client.rpc("al_signing_worker", {
+          p_action: "heartbeat",
+          p_payload: { ready: true, keyFingerprint: await sha256Hex(secret) },
+        });
+        const started: any = await route("send", { generation: 2 });
+        assert.equal(started.data.status, "sent");
+        await db.exec("reset role");
+        await db.query(
+          "update al_private.signing_outbox set status='cancelled' where envelope_id<>$1 or kind='webhook'",
+          [envelope.id],
+        );
+        await service();
+        const invitation = (
+          await client.rpc("al_signing_worker", { p_action: "claim" })
+        ).data;
+        assert.equal(invitation.job.kind, "invitation");
+        await processSigningJob(client, config, invitation, {
+          fetch: async (_input: any, init: any) => {
+            const mail = JSON.parse(init.body);
+            assert.deepEqual(mail.to, ["signer@example.invalid"]);
+            assert.equal(
+              init.headers["idempotency-key"],
+              invitation.job.effect_key,
+            );
+            sentToken = new URL(
+              mail.text.match(/https:\/\/[^\s]+/)[0],
+            ).hash.slice("#token=".length);
+            return new Response(
+              JSON.stringify({ id: "synthetic-provider-id" }),
+              { status: 200 },
+            );
+          },
+          postWebhook: async () => 204,
+        } as any);
+        assert.equal(sentToken.length, 64);
+        const signer = (action: string, body: any = {}) =>
+          publicSigning(
+            new Request("https://api.test/v1/signer/" + action, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ token: sentToken, ...body }),
+            }),
+            "/v1/signer/" + action,
+            client,
+          );
+        const view: any = await signer("view");
+        assert.equal(view.data.recipient.id, recipient.id);
+        assert.ok(!JSON.stringify(view).includes("storage_path"));
+        const file = await signer("document", { documentId });
+        assert.ok(file instanceof Response);
+        assert.equal(
+          await sha256Hex(
+            new Uint8Array(await (file as Response).arrayBuffer()),
+          ),
+          await sha256Hex(bytes),
+        );
+        const decision = {
+          intent: "approve",
+          documentSetHash: view.data.snapshotHash,
+          consentVersion: "email-approval-v1",
+          consent: true,
+          values: { [fid]: "Synthetic Signer" },
+        };
+        const approved: any = await signer("decide", { decision });
+        assert.equal(approved.data.envelopeStatus, "finalizing");
+        let finalize = (
+          await client.rpc("al_signing_worker", { p_action: "claim" })
+        ).data;
+        if (finalize.job.kind === "webhook") {
+          await processSigningJob(client, config, finalize, {
+            fetch: globalThis.fetch,
+            postWebhook: async () => 204,
+          });
+          finalize = (
+            await client.rpc("al_signing_worker", { p_action: "claim" })
+          ).data;
+        }
+        assert.equal(finalize.job.kind, "finalize");
+        await processSigningJob(client, config, finalize);
+        const result: any = await route("final");
+        assert.ok(result instanceof Response);
+        const archive = new Uint8Array(await result.arrayBuffer());
+        assert.equal(archive[0], 0x50);
+        assert.equal(archive[1], 0x4b);
+        const recipientFinal = await signer("final", { documentId });
+        assert.ok(recipientFinal instanceof Response);
+        assert.equal(
+          (
+            await PDFDocument.load(
+              await (recipientFinal as Response).arrayBuffer(),
+            )
+          ).getPageCount(),
+          2,
+        );
+        await db.exec("reset role");
+        assert.equal(
+          (
+            await one("select status from public.al_envelopes where id=$1", [
+              envelope.id,
+            ])
+          ).status,
+          "completed",
+        );
+        assert.equal(
+          (
+            await one(
+              "select sum(quantity)::int n from public.al_usage_events where envelope_id=$1 and kind='envelope_completed'",
+              [envelope.id],
+            )
+          ).n,
+          1,
+        );
+        assert.equal(
+          (
+            await one(
+              "select count(*)::int n from al_private.signing_outbox where envelope_id=$1 and kind='invitation' and status='accepted'",
+              [envelope.id],
+            )
+          ).n,
+          1,
+        );
+        assert.equal(
+          await sha256Hex(
+            objects.get(`al-documents/${oa}/${envelope.id}/${documentId}.pdf`)!,
+          ),
+          await sha256Hex(bytes),
+        );
+      } finally {
+        (globalThis as any).Deno = oldDeno;
+      }
+    },
+  );
+
+  await t.test(
+    "cancellation, decline and expiry revoke future signing and never complete an envelope",
+    async () => {
+      async function started() {
+        await actor(a);
+        const e = (
+          await one("select public.al_save_draft($1,'Lifecycle test') data", [
+            oa,
+          ])
+        ).data;
+        const r = (
+          await one(
+            "select public.al_add_recipient($1,$2,'Lifecycle Signer','lifecycle@example.invalid','email_approval',1) data",
+            [oa, e.id],
+          )
+        ).data;
+        const d = crypto.randomUUID(),
+          hash = await sha256Hex(crypto.randomUUID());
+        await db.exec("reset role");
+        await db.query(
+          "insert into storage.objects(bucket_id,name) values('al-documents',$1)",
+          [`${oa}/${e.id}/${d}.pdf`],
+        );
+        await service();
+        await flow(e.id, "register_document", {
+          id: d,
+          name: "lifecycle.pdf",
+          sha256: "a".repeat(64),
+          byteSize: 5,
+        });
+        await db.exec("reset role");
+        await db.query(
+          "update public.al_documents set status='ready',page_count=1 where id=$1",
+          [d],
+        );
+        await service();
+        await db.query(
+          "select public.al_signing_worker('heartbeat',null,null,$1)",
+          [{ ready: true, keyFingerprint: "f".repeat(64) }],
+        );
+        const result = await flow(e.id, "send", {
+          generation: 1,
+          snapshot: await flow(e.id, "read"),
+          links: [
+            { id: crypto.randomUUID(), recipientId: r.id, tokenHash: hash },
+          ],
+          keyFingerprint: "f".repeat(64),
+        });
+        return { e, r, hash, result };
+      }
+      const cancelled = await started();
+      assert.equal((await flow(cancelled.e.id, "cancel")).status, "cancelled");
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'view')", [
+          cancelled.hash,
+        ]),
+        /INVALID_SIGNING_LINK/,
+      );
+      const declined = await started();
+      const response = (
+        await one("select public.al_signer_command($1,'decide',$2) data", [
+          declined.hash,
+          {
+            intent: "decline",
+            documentSetHash: declined.result.snapshotHash,
+            reason: "Incorrect agreement",
+          },
+        ])
+      ).data;
+      assert.equal(response.envelopeStatus, "declined");
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'decide',$2)", [
+          declined.hash,
+          {
+            intent: "approve",
+            documentSetHash: declined.result.snapshotHash,
+            consent: true,
+            consentVersion: "email-approval-v1",
+            values: {},
+          },
+        ]),
+        /LINK_ALREADY_USED/,
+      );
+      const expired = await started();
+      await db.exec("reset role");
+      await db.query(
+        "update al_private.signing_cases set expires_at=now()-interval '1 second' where envelope_id=$1",
+        [expired.e.id],
+      );
+      await service();
+      assert.equal((await one("select public.al_expire_signing() n")).n, 1);
+      await assert.rejects(
+        db.query("select public.al_signer_command($1,'view')", [expired.hash]),
+        /INVALID_SIGNING_LINK/,
+      );
+      await db.exec("reset role");
+      assert.equal(
+        (
+          await one("select status from public.al_envelopes where id=$1", [
+            expired.e.id,
+          ])
+        ).status,
+        "expired",
+      );
+      assert.equal(
+        (
+          await one(
+            "select count(*)::int n from public.al_usage_events where envelope_id=any($1::uuid[]) and kind='envelope_completed'",
+            [[cancelled.e.id, declined.e.id, expired.e.id]],
+          )
+        ).n,
+        0,
+      );
+    },
+  );
   await db.close();
 });

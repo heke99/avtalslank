@@ -1,3 +1,4 @@
+import { signingTick, signingConfigured } from "./signing.ts";
 import { createServer } from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import { sha256Hex } from "../../packages/crypto/src/hash.ts";
@@ -17,6 +18,13 @@ const db =
         auth: { persistSession: false, autoRefreshToken: false },
       })
     : null;
+const signingConfig = {
+  secret: process.env.SIGNING_LINK_SECRET ?? "",
+  publicOrigin: process.env.PUBLIC_APP_ORIGIN ?? "",
+  resendKey: process.env.RESEND_API_KEY ?? "",
+  from: process.env.SIGNING_EMAIL_FROM ?? "",
+  domainVerified: process.env.SIGNING_EMAIL_DOMAIN_VERIFIED === "true",
+};
 let stopping = false,
   lastPoll = Date.now();
 let processing = false;
@@ -34,6 +42,7 @@ const server = createServer((req, res) => {
       configured,
       healthy,
       processing,
+      signingConfigured: signingConfigured(signingConfig),
     }),
   );
 });
@@ -53,6 +62,7 @@ async function tick() {
     };
   } | null = null;
   try {
+    await signingTick(db, signingConfig, configured);
     const claimed = await db.rpc("al_claim_document_job");
     if (claimed.error) throw claimed.error;
     job = claimed.data;
@@ -87,6 +97,7 @@ async function tick() {
       scanner: malware.engine,
       scannerVersion: malware.engineVersion,
       pdfTool: pdf.engine,
+      pageCount: pdf.pageCount,
       pdfVersion: pdf.engineVersion,
       checkedAt: new Date().toISOString(),
     };

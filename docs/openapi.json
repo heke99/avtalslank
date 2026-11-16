@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Avtalslänk API",
-    "version": "0.2.0",
-    "description": "Standalone workspace and draft API. Production sending, public signing, API file upload and payment checkout remain disabled. API-key POST calls require Idempotency-Key. User tokens require organizationId and verified membership."
+    "version": "0.3.0",
+    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId."
   },
   "servers": [
     {
@@ -215,19 +215,57 @@
         }
       ],
       "post": {
-        "summary": "Request signing; returns readiness blocker until qualified",
+        "summary": "Freeze current snapshot and queue invitations exactly once per envelope",
         "responses": {
           "200": {
-            "description": "Result"
+            "description": "Authorized result"
           },
           "400": {
-            "description": "Validation/readiness failure"
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
           },
           "403": {
-            "description": "Denied"
+            "description": "Membership or scope denied"
           },
-          "422": {
-            "description": "Delivery/provider not configured"
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "description": "Supabase verified user or scoped API key (envelopes:read/write as applicable). Customer organization is derived from the API key; organizationId selects an already-authorized organization for user tokens.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "generation"
+                ]
+              }
+            }
           }
         }
       }
@@ -245,19 +283,51 @@
         }
       ],
       "post": {
-        "summary": "Cancel a draft idempotently",
+        "summary": "Cancel draft or pending signing and revoke links",
         "responses": {
           "200": {
-            "description": "Result"
+            "description": "Authorized result"
           },
           "400": {
-            "description": "Validation/readiness failure"
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
           },
           "403": {
-            "description": "Denied"
+            "description": "Membership or scope denied"
           },
-          "422": {
-            "description": "Delivery/provider not configured"
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "description": "Supabase verified user or scoped API key (envelopes:read/write as applicable). Customer organization is derived from the API key; organizationId selects an already-authorized organization for user tokens.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": []
+              }
+            }
           }
         }
       }
@@ -908,6 +978,591 @@
                 "required": [
                   "name",
                   "fields"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/prepare": {
+      "get": {
+        "summary": "Read organization-scoped current document/recipient/field snapshot",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "description": "Supabase verified user or scoped API key (envelopes:read/write as applicable). Customer organization is derived from the API key; organizationId selects an already-authorized organization for user tokens.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/envelopes/{id}/documents": {
+      "post": {
+        "summary": "Upload immutable PDF; same documentId plus same bytes safely resumes registration",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "description": "Supabase verified user or scoped API key (envelopes:read/write as applicable). Customer organization is derived from the API key; organizationId selects an already-authorized organization for user tokens.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "documentId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/pdf": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "Actual PDF bytes, at most 10 MiB. Original object cannot be overwritten."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/fields": {
+      "post": {
+        "summary": "Replace draft fields with optimistic generation check",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "description": "Supabase verified user or scoped API key (envelopes:read/write as applicable). Customer organization is derived from the API key; organizationId selects an already-authorized organization for user tokens.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "fields": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "documentId",
+                        "recipientId",
+                        "type",
+                        "label",
+                        "required",
+                        "page",
+                        "x",
+                        "y",
+                        "width",
+                        "height"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "recipientId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "type": {
+                          "enum": [
+                            "text",
+                            "date"
+                          ]
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "page": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 99
+                        },
+                        "x": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "y": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "width": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "height": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "generation",
+                  "fields"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/deliveries": {
+      "get": {
+        "summary": "Read delivery attempts without link tokens or webhook secrets",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "description": "Supabase verified user or scoped API key (envelopes:read/write as applicable). Customer organization is derived from the API key; organizationId selects an already-authorized organization for user tokens.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/envelopes/{id}/final": {
+      "get": {
+        "summary": "Download completed PDF or evidence ZIP (default)",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "description": "Supabase verified user or scoped API key (envelopes:read/write as applicable). Customer organization is derived from the API key; organizationId selects an already-authorized organization for user tokens.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "documentId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/signer/view": {
+      "post": {
+        "summary": "Read recipient-only signing view",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "token"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/signer/document": {
+      "post": {
+        "summary": "Read original PDF bound to recipient and frozen case",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "token",
+                  "documentId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/signer/decide": {
+      "post": {
+        "summary": "Approve or decline with exact replay; token is consumed atomically",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "decision": {
+                    "type": "object",
+                    "required": [
+                      "intent",
+                      "documentSetHash"
+                    ],
+                    "properties": {
+                      "intent": {
+                        "enum": [
+                          "approve",
+                          "decline"
+                        ]
+                      },
+                      "documentSetHash": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "consent": {
+                        "type": "boolean",
+                        "description": "Must be true to approve"
+                      },
+                      "consentVersion": {
+                        "const": "email-approval-v1"
+                      },
+                      "values": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 2000
+                        }
+                      },
+                      "reason": {
+                        "type": "string",
+                        "maxLength": 500
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "token",
+                  "decision"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/signer/final": {
+      "post": {
+        "summary": "Download completed PDF as an approved recipient",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "token",
+                  "documentId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhooks": {
+      "post": {
+        "summary": "Owner/admin creates webhook secret once, or changes activation of existing endpoint",
+        "responses": {
+          "200": {
+            "description": "Authorized result"
+          },
+          "400": {
+            "description": "Invalid input or not ready"
+          },
+          "401": {
+            "description": "Invalid identity/link"
+          },
+          "403": {
+            "description": "Membership or scope denied"
+          },
+          "409": {
+            "description": "Version or immutable upload conflict"
+          }
+        },
+        "description": "Supabase verified user or scoped API key (envelopes:read/write as applicable). Customer organization is derived from the API key; organizationId selects an already-authorized organization for user tokens.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "active": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "url"
                 ]
               }
             }

@@ -40,7 +40,10 @@ async function workspace(page: Page) {
     if (req.method() === "OPTIONS")
       return route.fulfill({ status: 204, headers });
     let value: unknown = [];
-    if (path.endsWith("/al_organizations")) {
+    if (path.endsWith("/prepare"))
+      value = { data: { envelope: { fields: [] } } };
+    else if (path.endsWith("/deliveries")) value = { data: [] };
+    else if (path.endsWith("/al_organizations")) {
       const o = {
         id: org,
         name: "Testföretaget",
@@ -128,14 +131,31 @@ async function workspace(page: Page) {
         status: "pending",
       };
       recipients.push(value as Record<string, unknown>);
-    } else if(path.endsWith('/al_edit_recipient')){
-      const b=req.postDataJSON();const r=recipients.find(r=>r.id===b.p_id)!;Object.assign(r,{name:b.p_name,email:b.p_email,method:b.p_method});value=r;
-    } else if(path.endsWith('/al_remove_recipient')){
-      const b=req.postDataJSON();recipients=recipients.filter(r=>r.id!==b.p_id);recipients.forEach((r,i)=>r.position=i+1);value={removed:b.p_id};
-    } else if(path.endsWith('/al_reorder_recipients')){
-      const b=req.postDataJSON();recipients=b.p_ids.map((id:string,i:number)=>({...recipients.find(r=>r.id===id),position:i+1}));value=b.p_ids;
-    } else if(path.endsWith('/al_duplicate_draft')){
-      const b=req.postDataJSON();value={...envelopes[0],id:crypto.randomUUID(),title:b.p_title};envelopes.push(value as Record<string,unknown>);
+    } else if (path.endsWith("/al_edit_recipient")) {
+      const b = req.postDataJSON();
+      const r = recipients.find((r) => r.id === b.p_id)!;
+      Object.assign(r, {
+        name: b.p_name,
+        email: b.p_email,
+        method: b.p_method,
+      });
+      value = r;
+    } else if (path.endsWith("/al_remove_recipient")) {
+      const b = req.postDataJSON();
+      recipients = recipients.filter((r) => r.id !== b.p_id);
+      recipients.forEach((r, i) => (r.position = i + 1));
+      value = { removed: b.p_id };
+    } else if (path.endsWith("/al_reorder_recipients")) {
+      const b = req.postDataJSON();
+      recipients = b.p_ids.map((id: string, i: number) => ({
+        ...recipients.find((r) => r.id === id),
+        position: i + 1,
+      }));
+      value = b.p_ids;
+    } else if (path.endsWith("/al_duplicate_draft")) {
+      const b = req.postDataJSON();
+      value = { ...envelopes[0], id: crypto.randomUUID(), title: b.p_title };
+      envelopes.push(value as Record<string, unknown>);
     } else if (path.endsWith("/al_save_template")) {
       const b = req.postDataJSON();
       value = {
@@ -161,9 +181,7 @@ async function workspace(page: Page) {
     return route.fulfill({ status: 200, headers, body: JSON.stringify(value) });
   });
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Översikt" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Översikt" })).toBeVisible();
 }
 test("desktop workspace: draft, Freja selection, readiness block, fields, billing remains unconfigured", async ({
   page,
@@ -238,9 +256,7 @@ test("login page and invalid signer link never fabricate signed status", async (
   page,
 }) => {
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Logga in" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Logga in" })).toBeVisible();
   await page.screenshot({ path: ".verification/login.png", fullPage: true });
   await page.goto("/s/invalid-token");
   await expect(
@@ -257,9 +273,7 @@ test("desktop empty state uses real counts and provides a primary action", async
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await workspace(page);
-  await expect(
-    page.getByText("Inga avtal ännu"),
-  ).toBeVisible();
+  await expect(page.getByText("Inga avtal ännu")).toBeVisible();
   await page.screenshot({
     path: ".verification/desktop-workspace.png",
     fullPage: true,
@@ -292,30 +306,187 @@ test("workspace operations: contacts, team guard and usage without billing", asy
   ).toBeVisible();
 });
 
-test('recipient editing, ordering, removal and draft copying refresh the editor',async({page})=>{
- await workspace(page);
- await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();
- await page.getByLabel('Avtalets namn').fill('Originalavtal');
- await page.getByRole('button',{name:'Skapa utkast'}).click();
- await page.getByRole('button',{name:'Till mottagare'}).click();
- for(const [name,email] of [['Person Ett','one@example.invalid'],['Person Två','two@example.invalid']]){
-  await page.getByLabel('Namn',{exact:true}).fill(name);await page.getByLabel('E-post',{exact:true}).fill(email);await page.getByRole('button',{name:'Lägg till mottagare',exact:true}).click();
-  await expect(page.getByText(name,{exact:true})).toBeVisible();
- }
- await page.getByRole('button',{name:'Flytta upp Person Två',exact:true}).click();
- const first=page.locator('.list-row').filter({hasText:'Person Två'});
- await expect(first.locator('.recipient-number')).toHaveText('1');
- await first.getByRole('button',{name:'Redigera',exact:true}).click();
- await first.getByLabel('Namn',{exact:true}).fill('Redigerad Person');
- await first.getByLabel('Signeringsmetod',{exact:true}).selectOption('freja');
- await first.getByRole('button',{name:'Spara mottagare'}).click();
- await expect(page.getByText('Redigerad Person',{exact:true})).toBeVisible();
- await page.locator('.list-row').filter({hasText:'Person Ett'}).getByRole('button',{name:'Ta bort',exact:true}).click();
- await expect(page.getByText('Person Ett',{exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'Kopiera till nytt utkast'}).click();
- await page.getByLabel('Nytt avtalsnamn').fill('Nytt kopierat avtal');
- await page.getByRole('button',{name:'Skapa kopia',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Nytt kopierat avtal',exact:true})).toBeVisible();
- await page.getByRole('button',{name:/Uppgifter/}).click();
- await expect(page.getByLabel('Avtalets namn')).toHaveValue('Nytt kopierat avtal');
+test("recipient editing, ordering, removal and draft copying refresh the editor", async ({
+  page,
+}) => {
+  await workspace(page);
+  await page.getByRole("button", { name: "Nytt avtal", exact: true }).click();
+  await page.getByLabel("Avtalets namn").fill("Originalavtal");
+  await page.getByRole("button", { name: "Skapa utkast" }).click();
+  await page.getByRole("button", { name: "Till mottagare" }).click();
+  for (const [name, email] of [
+    ["Person Ett", "one@example.invalid"],
+    ["Person Två", "two@example.invalid"],
+  ]) {
+    await page.getByLabel("Namn", { exact: true }).fill(name);
+    await page.getByLabel("E-post", { exact: true }).fill(email);
+    await page
+      .getByRole("button", { name: "Lägg till mottagare", exact: true })
+      .click();
+    await expect(page.getByText(name, { exact: true })).toBeVisible();
+  }
+  await page
+    .getByRole("button", { name: "Flytta upp Person Två", exact: true })
+    .click();
+  const first = page.locator(".list-row").filter({ hasText: "Person Två" });
+  await expect(first.locator(".recipient-number")).toHaveText("1");
+  await first.getByRole("button", { name: "Redigera", exact: true }).click();
+  await first.getByLabel("Namn", { exact: true }).fill("Redigerad Person");
+  await first
+    .getByLabel("Signeringsmetod", { exact: true })
+    .selectOption("freja");
+  await first.getByRole("button", { name: "Spara mottagare" }).click();
+  await expect(
+    page.getByText("Redigerad Person", { exact: true }),
+  ).toBeVisible();
+  await page
+    .locator(".list-row")
+    .filter({ hasText: "Person Ett" })
+    .getByRole("button", { name: "Ta bort", exact: true })
+    .click();
+  await expect(page.getByText("Person Ett", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Kopiera till nytt utkast" }).click();
+  await page.getByLabel("Nytt avtalsnamn").fill("Nytt kopierat avtal");
+  await page.getByRole("button", { name: "Skapa kopia", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Nytt kopierat avtal", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Uppgifter/ }).click();
+  await expect(page.getByLabel("Avtalets namn")).toHaveValue(
+    "Nytt kopierat avtal",
+  );
+});
+
+test("public recipient: document review and explicit approval, no account required", async ({
+  page,
+}) => {
+  const { PDFDocument } = await import("pdf-lib");
+  const { createHash } = await import("node:crypto");
+  const pdf = await PDFDocument.create();
+  pdf.addPage([595, 842]);
+  const bytes = await pdf.save(),
+    hash = createHash("sha256").update(bytes).digest("hex");
+  let approved = false;
+  const recipient = "11111111-1111-4111-8111-111111111111",
+    documentId = "22222222-2222-4222-8222-222222222222",
+    fieldId = "33333333-3333-4333-8333-333333333333";
+  await page.route(
+    "**/functions/v1/avtalslank-api/v1/signer/**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname,
+        body = route.request().postDataJSON();
+      const headers = {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "*",
+        "content-type": "application/json",
+      };
+      if (route.request().method() === "OPTIONS")
+        return route.fulfill({ status: 204, headers });
+      if (path.endsWith("/document"))
+        return route.fulfill({
+          status: 200,
+          headers: { ...headers, "content-type": "application/pdf" },
+          body: Buffer.from(bytes),
+        });
+      if (path.endsWith("/decide")) {
+        expect(body.decision.consent).toBe(true);
+        expect(body.decision.values[fieldId]).toBe("Anna Andersson");
+        expect(body.decision.documentSetHash).toBe("a".repeat(64));
+        approved = true;
+        return route.fulfill({
+          status: 200,
+          headers,
+          body: JSON.stringify({
+            data: { status: "signed", envelopeStatus: "finalizing" },
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        headers,
+        body: JSON.stringify({
+          data: {
+            title: "Kundavtal",
+            message: "Läs igenom avtalet.",
+            status: "sent",
+            snapshotHash: "a".repeat(64),
+            expiresAt: "2099-01-01T00:00:00Z",
+            waiting: false,
+            recipient: {
+              id: recipient,
+              name: "Anna Andersson",
+              method: "email_approval",
+              status: "pending",
+            },
+            fields: [
+              {
+                id: fieldId,
+                label: "Ditt namn",
+                type: "text",
+                required: true,
+                page: 0,
+                documentId,
+              },
+            ],
+            documents: [
+              { id: documentId, name: "kundavtal.pdf", sha256: hash },
+            ],
+          },
+        }),
+      });
+    },
+  );
+  await page.goto("/s/#token=" + "f".repeat(64));
+  await expect(
+    page.getByRole("heading", { name: "Kundavtal", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Godkänn avtal", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Öppna dokument" }).click();
+  await expect(page.getByText("Öppnat", { exact: true })).toBeVisible();
+  await page.getByLabel("Ditt namn *", { exact: true }).fill("Anna Andersson");
+  await page.getByRole("checkbox").check();
+  await page
+    .getByRole("button", { name: "Godkänn avtal", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Ditt godkännande är registrerat." }),
+  ).toBeVisible();
+  expect(approved).toBe(true);
+  await page.screenshot({
+    path: ".verification/recipient-approved.png",
+    fullPage: true,
+  });
+});
+test("recipient cannot approve before predecessor; link errors do not reveal agreement", async ({
+  page,
+}) => {
+  await page.route(
+    "**/functions/v1/avtalslank-api/v1/signer/**",
+    async (route) => {
+      const headers = {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "*",
+        "content-type": "application/json",
+      };
+      if (route.request().method() === "OPTIONS")
+        return route.fulfill({ status: 204, headers });
+      return route.fulfill({
+        status: 400,
+        headers,
+        body: JSON.stringify({ error: { code: "INVALID_SIGNING_LINK" } }),
+      });
+    },
+  );
+  await page.goto("/s/" + "e".repeat(64));
+  await expect(
+    page.getByRole("heading", {
+      name: "Signeringslänken kan inte öppnas",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Godkänn avtal", exact: true }),
+  ).toHaveCount(0);
 });

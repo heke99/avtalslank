@@ -47,6 +47,13 @@ import {
 } from "../../packages/domain/src/index.ts";
 import { sha256Hex } from "../../packages/crypto/src/hash.ts";
 import "./styles.css";
+import Signer from "./Signer";
+import Webhooks from "./Webhooks";
+import {
+  SigningPreparation,
+  DeliveryHistory,
+  envelopeApi,
+} from "./SigningPreparation";
 import {
   WorkspaceOperations,
   RecipientTools,
@@ -81,6 +88,7 @@ type Document = {
   storage_path: string;
   sha256: string;
   byte_size: number;
+  page_count: number | null;
 };
 type Template = {
   id: string;
@@ -206,21 +214,7 @@ function App() {
         <p>Öppnar din arbetsyta…</p>
       </div>
     );
-  if (location.pathname.startsWith("/s/"))
-    return (
-      <div className="center-screen">
-        <Brand />
-        <div className="empty-card">
-          <ShieldCheck size={36} />
-          <h1>Signeringslänken kan inte öppnas</h1>
-          <p>
-            Kontakta avsändaren för att kontrollera länken. Ingen underskrift
-            har registrerats här.
-          </p>
-          <a href="/">Till Avtalslänk</a>
-        </div>
-      </div>
-    );
+  if (location.pathname.startsWith("/s/")) return <Signer />;
   if (location.pathname === "/reset-password")
     return <PasswordReset session={session} onError={notify} notice={notice} />;
   if (!session) return <Auth onError={notify} notice={notice} />;
@@ -556,7 +550,10 @@ function App() {
                 />
               )}
               {view === "developers" && (
-                <Developer orgId={orgId} action={action} busy={busy} />
+                <>
+                  <Developer orgId={orgId} action={action} busy={busy} />
+                  <Webhooks key={orgId} orgId={orgId} />
+                </>
               )}
               {view === "workspace" && (
                 <WorkspaceOperations
@@ -1324,6 +1321,16 @@ function EnvelopeDetail({
         )}
         {step === 2 && (
           <>
+            <SigningPreparation
+              key={e.id}
+              orgId={orgId}
+              envelopeId={e.id}
+              generation={e.generation}
+              locked={locked}
+              documents={documents}
+              recipients={recipients}
+              onSaved={onSaved}
+            />
             <h2>Uppgifter och meddelande</h2>
             <form
               onSubmit={(ev) => {
@@ -1432,12 +1439,10 @@ function EnvelopeDetail({
                 onClick={() => {
                   if (window.confirm("Vill du avbryta det här utkastet?"))
                     action(async () => {
-                      onSaved(
-                        await rpc("al_cancel_envelope", {
-                          p_org: orgId,
-                          p_envelope: e.id,
-                        }),
-                      );
+                      onSaved({
+                        ...e,
+                        ...(await envelopeApi(orgId, e.id, "cancel", {})),
+                      });
                     });
                 }}
               >
@@ -1448,13 +1453,12 @@ function EnvelopeDetail({
                 disabled={busy || locked || issues.length > 0}
                 onClick={() =>
                   action(async () => {
-                    onSaved(
-                      await rpc("al_send_envelope", {
-                        p_org: orgId,
-                        p_envelope: e.id,
-                        p_generation: e.generation,
-                      }),
-                    );
+                    onSaved({
+                      ...e,
+                      ...(await envelopeApi(orgId, e.id, "send", {
+                        generation: e.generation,
+                      })),
+                    });
                   })
                 }
               >
@@ -1465,6 +1469,7 @@ function EnvelopeDetail({
           </>
         )}
       </section>
+      <DeliveryHistory orgId={orgId} envelopeId={e.id} status={e.status} />
       <section className="panel timeline">
         <h2>Händelser</h2>
         {events.length === 0 ? (
