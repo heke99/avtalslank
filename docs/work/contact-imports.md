@@ -22,3 +22,5 @@ No overwritten/restored existing contact, invitations, emails, billing events or
 A lost response may be retried manually with the same current preview/reference. Reference is component-memory only; choosing another file/mapping starts a new import. After leaving/reopening the page, a repeated file has a new reference but existing emails still skip. Receipt count is the historical original result, not current contact state. Export adds a leading apostrophe for formula-like cells; reimport does not strip that protection automatically.
 
 Local verification:93 code/database tests and build/type gates passed. Hosted migration, Edge deployment and browser results pending. Browser requests use network doubles and do not prove real Auth/email/provider flows. Existing signing/payment/runtime gates remain unchanged.
+
+Migration deployment record: Supabase assigned version20261116195314 to contact_imports. The CLI-created local file was renamed to that recorded version after applying; its SQL content is unchanged. This aligns this migration's filename with hosted history without reapplying schema or editing migration statements.
