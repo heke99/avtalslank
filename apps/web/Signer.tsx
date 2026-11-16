@@ -185,8 +185,8 @@ export default function Signer() {
             <section className="panel signer-panel">
               <h1>Signeringslänken kan inte öppnas</h1>
               <p>
-                Kontakta avsändaren för en ny länk. Ingen underskrift har
-                registrerats här.
+                Kontakta avsändaren för att kontrollera länken. Ingen
+                underskrift har registrerats här.
               </p>
             </section>
           ) : (

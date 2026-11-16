@@ -34,7 +34,7 @@ async function workspace(page: Page) {
       path = url.pathname;
     const headers = {
       "access-control-allow-origin": "*",
-      "access-control-allow-headers": "*",
+      "access-control-allow-headers": "authorization,content-type,apikey,x-client-info",
       "content-type": "application/json",
     };
     if (req.method() === "OPTIONS")
@@ -377,7 +377,7 @@ test("public recipient: document review and explicit approval, no account requir
         body = route.request().postDataJSON();
       const headers = {
         "access-control-allow-origin": "*",
-        "access-control-allow-headers": "*",
+        "access-control-allow-headers": "authorization,content-type,apikey,x-client-info",
         "content-type": "application/json",
       };
       if (route.request().method() === "OPTIONS")
@@ -467,7 +467,7 @@ test("recipient cannot approve before predecessor; link errors do not reveal agr
     async (route) => {
       const headers = {
         "access-control-allow-origin": "*",
-        "access-control-allow-headers": "*",
+        "access-control-allow-headers": "authorization,content-type,apikey,x-client-info",
         "content-type": "application/json",
       };
       if (route.request().method() === "OPTIONS")
@@ -489,4 +489,113 @@ test("recipient cannot approve before predecessor; link errors do not reveal agr
   await expect(
     page.getByRole("button", { name: "Godkänn avtal", exact: true }),
   ).toHaveCount(0);
+});
+
+test("sender can recall a sent envelope through the connected API", async ({
+  page,
+}) => {
+  await workspace(page);
+  await page.route(
+    `https://${ref}.supabase.co/rest/v1/rpc/al_capabilities`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "authorization,content-type,apikey,x-client-info",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(
+          ["bankid", "freja", "email_approval", "drawn_signature"].map(
+            (method) => ({
+              method,
+              enabled: method === "email_approval",
+              reason: null,
+            }),
+          ),
+        ),
+      }),
+  );
+  await page.route(
+    `https://${ref}.supabase.co/rest/v1/al_documents*`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "authorization,content-type,apikey,x-client-info",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify([
+          {
+            id: "44444444-4444-4444-8444-444444444444",
+            name: "contract.pdf",
+            status: "ready",
+            page_count: 1,
+            storage_path: "synthetic/path",
+            sha256: "a".repeat(64),
+            byte_size: 1000,
+          },
+        ]),
+      }),
+  );
+  let recalled = false;
+  await page.route(
+    "**/functions/v1/avtalslank-api/v1/envelopes/**/send*",
+    (route) =>
+      route.fulfill({
+        status: 200,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "authorization,content-type,apikey,x-client-info",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ data: { status: "sent" } }),
+      }),
+  );
+  await page.route(
+    "**/functions/v1/avtalslank-api/v1/envelopes/**/cancel*",
+    (route) => {
+      recalled = true;
+      return route.fulfill({
+        status: 200,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "authorization,content-type,apikey,x-client-info",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ data: { status: "cancelled" } }),
+      });
+    },
+  );
+  await page.getByRole("button", { name: "Nytt avtal", exact: true }).click();
+  await page.getByLabel("Avtalets namn").fill("Återkallat testavtal");
+  await page.getByRole("button", { name: "Skapa utkast" }).click();
+  await page.getByRole("button", { name: "Till mottagare" }).click();
+  await page.getByLabel("Namn", { exact: true }).fill("Testperson");
+  await page
+    .getByLabel("E-post", { exact: true })
+    .fill("person@example.invalid");
+  await page
+    .getByLabel("Signeringsmetod", { exact: true })
+    .selectOption("email_approval");
+  await page
+    .getByRole("button", { name: "Lägg till mottagare", exact: true })
+    .click();
+  await page.getByRole("button", { name: /Granska & skicka/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Skicka för signering", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Skicka för signering", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Återkalla utskick", exact: true }),
+  ).toBeEnabled();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "Återkalla utskick", exact: true })
+    .click();
+  await expect(page.getByText("Avbrutet", { exact: true })).toBeVisible();
+  expect(recalled).toBe(true);
 });

@@ -1435,9 +1435,17 @@ function EnvelopeDetail({
             <div className="actions">
               <button
                 className="secondary danger"
-                disabled={busy || locked}
+                disabled={
+                  busy || !["draft", "sent", "in_progress"].includes(e.status)
+                }
                 onClick={() => {
-                  if (window.confirm("Vill du avbryta det här utkastet?"))
+                  if (
+                    window.confirm(
+                      e.status === "draft"
+                        ? "Vill du avbryta det här utkastet?"
+                        : "Återkalla utskicket? Mottagarnas signeringslänkar slutar fungera.",
+                    )
+                  )
                     action(async () => {
                       onSaved({
                         ...e,
@@ -1446,7 +1454,7 @@ function EnvelopeDetail({
                     });
                 }}
               >
-                Avbryt utkast
+                {e.status === "draft" ? "Avbryt utkast" : "Återkalla utskick"}
               </button>
               <button
                 className="primary"
