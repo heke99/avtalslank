@@ -1,3 +1,4 @@
+import {ContactTransfer} from "./ContactTransfer";
 import {TeamInvitations} from "./AccountOperations";
 import {activityLabel} from "../../packages/domain/src/activity";
 import React, { useEffect, useState } from "react";
@@ -431,6 +432,7 @@ export function WorkspaceOperations({
     });
     setEvents(more ? [...events, ...data] : data);
   }
+  const visibleContacts=contacts.filter(c=>c.archived===showArchived&&[c.name,c.email,c.company].join(' ').toLocaleLowerCase('sv').includes(search.trim().toLocaleLowerCase('sv')));
   const visibleEvents=events.filter(e=>(activityLabel(e.kind)+' '+e.kind).toLocaleLowerCase('sv').includes(activitySearch.trim().toLocaleLowerCase('sv')));
   return (
     <section className="operations">
@@ -488,15 +490,8 @@ export function WorkspaceOperations({
             </label>
           </div>
           <p className="muted">Visar upp till 500 kontakter.</p>
-          {contacts
-            .filter(
-              (c) =>
-                c.archived === showArchived &&
-                [c.name, c.email, c.company]
-                  .join(" ")
-                  .toLocaleLowerCase("sv")
-                  .includes(search.toLocaleLowerCase("sv")),
-            )
+          <ContactTransfer key={orgId} orgId={orgId} writable={writable} visible={visibleContacts} onImported={load}/>
+          {visibleContacts
             .map((c) => (
               <div className="list-row" key={c.id}>
                 <span className="grow">

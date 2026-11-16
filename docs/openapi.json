@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Avtalslänk API",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled. User-only account controls register versioned terms acceptance, commercial plan interest (no billing), bounded API-key lifecycle and disabled-webhook secret rotation. API-key expiry is checked before cached responses. New credential secrets are returned only once; mutations are never automatically retried."
   },
   "servers": [
@@ -1968,6 +1968,38 @@
           },
           "403": {
             "description": "Organization membership or administrator permission required"
+          }
+        }
+      }
+    },
+    "/v1/contacts/imports": {
+      "get": {
+        "summary": "Read the last 20 contact import receipts",
+        "description": "User JWT plus organizationId or API key with envelopes:read. Tenant derives from verified membership/key. Returns requestId, createdAt and counts only; no source CSV/rows.",
+        "responses": {
+          "200": {
+            "description": "data array of receipts"
+          }
+        }
+      },
+      "post": {
+        "summary": "Import up to 200 contacts atomically",
+        "description": "User JWT plus organizationId or API key with envelopes:write. JSON body: requestId UUID and rows:[{name,email,company?}]. Name2..120, email<=254, company<=160. Total HTTP payload<=65536 bytes. Server trims and lowercases email; duplicate normalized emails in batch reject the entire import. Existing emails (including archived contacts) are skipped, never updated or restored. All rows validate before writes. Same organization/requestId and normalized ordered rows returns original counts; changed rows cause IDEMPOTENCY_CONFLICT. Authorization/scope/expiry is checked before replay. Manual retry after unknown response must reuse the same requestId and ordered rows. No automatic POST retry. No emails or charges. Result: requestId,total,created,skipped,archivedSkipped.",
+        "responses": {
+          "200": {
+            "description": "data import result"
+          },
+          "400": {
+            "description": "Validation failure; no partial import"
+          },
+          "401": {
+            "description": "Authentication/key failure"
+          },
+          "403": {
+            "description": "Insufficient membership or scope"
+          },
+          "409": {
+            "description": "Idempotency conflict"
           }
         }
       }

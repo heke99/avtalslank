@@ -23,3 +23,5 @@ Current production UX/API work: docs/work/production-ux-api.md. Customer pages o
 Current account/integration controls: docs/work/account-security-controls.md. Key rotation must preserve scopes/expiry, and webhook rotation must block unresolved delivery outcomes. Individual account terms acceptance never activates billing or concludes a DPA.
 
 Current template/editor iteration: docs/work/templates-and-editor.md. Template application copies actual fields and maps roles explicitly; existing server field/generation/tenant checks remain authoritative. Never silently discard unsaved document fields or treat template signature inputs as verified signatures.
+
+Current contact transfer iteration: docs/work/contact-imports.md. Import batches are atomic and do not overwrite existing or archived contacts. Replays must recheck identity/scope before returning stored counts. CSV export includes only the visible loaded tenant subset and neutralizes formula-like content.

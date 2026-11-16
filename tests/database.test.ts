@@ -1865,5 +1865,30 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     for(const days of [0,91])await assert.rejects(db.query("select public.al_save_draft($1,'Invalid expiry','',false,$2,$3,$4)",[oa,days,e.id,updated.generation]),/al_envelopes_expires_days_check/);
     await db.query('select public.al_cancel_envelope($1,$2)',[oa,e.id]);await service();await assert.rejects(flow(e.id,'fields',{generation:updated.generation,fields:copied}),/DOCUMENT_LOCKED/);
   });
+  await t.test('contact import validates the entire batch, normalizes identity, skips existing and replays safely',async()=>{
+    await service();const request=crypto.randomUUID();const run=async(rows:any,id=request,who=a,org=oa)=>(await one('select public.al_contact_import($1,null,$2,$3,$4) data',[who,org,id,rows])).data;
+    await assert.rejects(run([{name:'Should roll back',email:'rollback-import@example.invalid',company:''},{name:'X',email:'bad'}]),/INVALID_CONTACT_IMPORT/);
+    await db.exec('reset role');assert.equal((await one("select count(*)::int n from public.al_contacts where email='rollback-import@example.invalid'")).n,0);await service();
+    await assert.rejects(run([{name:'First',email:'Dupe@example.invalid'},{name:'Second',email:'dupe@example.invalid'}]),/DUPLICATE_IMPORT_EMAIL/);
+    const first=await run([{name:' Import Contact ',email:' IMPORT@EXAMPLE.INVALID ',company:' Co '}]);assert.equal(first.created,1);assert.equal(first.total,1);
+    assert.deepEqual(await run([{name:'Import Contact',email:'import@example.invalid',company:'Co'}]),first);
+    await assert.rejects(run([{name:'Different',email:'other-import@example.invalid'}]),/IDEMPOTENCY_CONFLICT/);
+    await db.exec('reset role');const row=await one("select * from public.al_contacts where organization_id=$1 and email='import@example.invalid'",[oa]);await db.query('update public.al_contacts set archived=true where id=$1',[row.id]);await service();
+    const skipped=await run([{name:'Do not overwrite',email:'import@example.invalid',company:'Changed'}],crypto.randomUUID());assert.equal(skipped.skipped,1);assert.equal(skipped.archivedSkipped,1);
+    await db.exec('reset role');const preserved=await one('select * from public.al_contacts where id=$1',[row.id]);assert.equal(preserved.name,'Import Contact');assert.equal(preserved.version,row.version);assert.equal(preserved.archived,true);await service();
+    await assert.rejects(run([{name:'Foreign',email:'foreign-import@example.invalid'}],crypto.randomUUID(),b,oa),/ACCESS_DENIED/);
+    await assert.rejects(run([{name:'Reader',email:'reader-import@example.invalid'}],crypto.randomUUID(),'33333333-3333-4333-8333-333333333333',oa),/ACCESS_DENIED/);
+    const history=(await one('select public.al_contact_import($1,null,$2) data',[a,oa])).data;assert.ok(history.some((h:any)=>h.requestId===request));assert.ok(!JSON.stringify(history).includes('import@example.invalid'));
+    await actor(a);await assert.rejects(db.query('select * from al_private.contact_imports'),/permission denied/);await assert.rejects(db.query('select public.al_contact_import($1,null,$2)',[a,oa]),/permission denied/);
+  });
+  await t.test('contact import HTTP adapter and API-key scope reject unauthorized replay and metadata injection',async()=>{
+    await service();const {contactsRoute}=await import('../supabase/functions/avtalslank-api/contacts.ts');const client:any={rpc:async(name:string,args:any)=>{try{await service();const ks=Object.keys(args);return{data:(await one(`select public.${name}(${ks.map((k,i)=>`${k} => $${i+1}`).join(',')}) data`,Object.values(args))).data,error:null};}catch(error){return{data:null,error};}}};
+    const req=new Request('https://avtalslank.test/v1/contacts/imports',{method:'POST'});const body={requestId:crypto.randomUUID(),rows:[{name:'API import',email:'api-import@example.invalid'}]};
+    const hash=await sha256Hex('contact-import-api-key');await actor(a);const key=(await one("select public.al_issue_api_key($1,'Contact import','al_live_87654321',$2,array['envelopes:write']) id",[oa,hash])).id;
+    const identity={actor:null,keyHash:hash,organizationId:ob};const v:any=await contactsRoute(req,'/v1/contacts/imports',client,identity,body);assert.equal(v.data.created,1);
+    await assert.rejects(contactsRoute(new Request('https://avtalslank.test/v1/contacts/imports'),'/v1/contacts/imports',client,identity,{}),/SCOPE_DENIED/);
+    await assert.rejects(contactsRoute(req,'/v1/contacts/imports',client,{actor:a,keyHash:null,organizationId:oa},{...body,requestId:crypto.randomUUID(),rows:[{name:'Injected',email:'inject@example.invalid',organizationId:ob}]}),/INVALID_CONTACT_IMPORT/);
+    await actor(a);await db.query('select public.al_revoke_api_key($1,$2)',[oa,key]);await assert.rejects(contactsRoute(req,'/v1/contacts/imports',client,identity,body),/INVALID_API_KEY/);
+  });
   await db.close();
 });

@@ -1,3 +1,4 @@
+import {contactsRoute} from "./contacts.ts";
 import {securityRoute} from "./security.ts";
 import {queryRoute} from "./query.ts";
 import {operationsRoute} from "./operations.ts";
@@ -26,7 +27,7 @@ function requireId(v: unknown): string {
   if (typeof v !== "string" || !uuid.test(v)) throw new Error("INVALID_ID");
   return v;
 }
-const safeCodes = new Set([
+const safeCodes = new Set(["CONTACT_IMPORT_LIMIT","INVALID_CONTACT_IMPORT","DUPLICATE_IMPORT_EMAIL",
   "INVALID_SIGNING_LINK",
   "LINK_ALREADY_USED",
   "DOCUMENT_SET_CHANGED",
@@ -157,6 +158,8 @@ Deno.serve(async (req: Request) => {
     }
     const securityResult=await securityRoute(req,path,service,{actor:verifiedActor,keyHash:isApi?await sha256Hex(token):null,organizationId:isApi?null:(body.organizationId??new URL(req.url).searchParams.get('organizationId')) as string|null},body);
     if(securityResult)return response(securityResult);
+    const contactResult=await contactsRoute(req,path,service,{actor:verifiedActor,keyHash:isApi?await sha256Hex(token):null,organizationId:isApi?null:(body.organizationId??new URL(req.url).searchParams.get('organizationId')) as string|null},body);
+    if(contactResult)return response(contactResult);
     const opResult=await operationsRoute(req,path,service,{actor:verifiedActor,keyHash:isApi?await sha256Hex(token):null,organizationId:isApi?null:(body.organizationId??new URL(req.url).searchParams.get('organizationId')) as string|null},body);
     if(opResult)return response(opResult);
     const connected = await connectedRoute(

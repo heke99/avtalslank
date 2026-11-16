@@ -17,6 +17,15 @@ export const apiUrl =
   import.meta.env.VITE_API_URL || `${url}/functions/v1/avtalslank-api`;
 export const friendlyError = (message: string) =>
   ({
+    IDEMPOTENCY_CONFLICT: "Referensen har redan använts för ett annat innehåll. Läs in filen igen för en ny import. Kontrollera historiken först om utfallet var osäkert.",
+    CONTACT_IMPORT_LIMIT: "Importera 1–200 kontakter per anrop och använd en giltig importreferens.",
+    INVALID_CONTACT_IMPORT: "Kontrollera importens namn, e-postadresser och företag. Inga kontakter har sparats.",
+    DUPLICATE_IMPORT_EMAIL: "Samma e-postadress finns flera gånger i importen. Inga kontakter har sparats.",
+    CSV_TOO_LARGE: "CSV-filen får vara högst 256 KB.",
+    CSV_COLUMNS: "CSV-raderna måste ha samma antal kolumner, högst 30.",
+    CSV_MAPPING: "Välj olika kolumner för namn, e-post och företag.",
+    CSV_NO_DATA: "Filen behöver en rubrikrad och minst en kontakt.",
+    INVALID_CSV: "CSV-filen har felaktiga citattecken eller kontrolltecken.",
     INVALID_TEMPLATE_LAYOUT: "Kontrollera mallfältens etiketter, roller, sidnummer och placering. Fälten måste ligga inom sidan.",
     FIELD_LIMIT: "Ett avtal kan ha högst 200 dokumentfält.",
     EMPTY_TEMPLATE: "Fältmallen innehåller inga fält.",
