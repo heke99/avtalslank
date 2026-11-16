@@ -23,5 +23,24 @@ do $$declare o uuid;begin
   update public.al_envelopes set status='completed';raise exception 'DIRECT_COMPLETION_ALLOWED';
  exception when insufficient_privilege then null;end;
 end $$;
+select set_config('request.jwt.claims','{"sub":"f8160001-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$declare o uuid:=current_setting('al.smoke_org_a')::uuid;e uuid:=current_setting('al.smoke_envelope_a')::uuid;r uuid;c jsonb;u jsonb;begin
+ select id into r from public.al_recipients where envelope_id=e;
+ perform public.al_edit_recipient(o,e,r,'Smoke redigerad','smoke-edit@example.invalid','bankid');
+ perform public.al_reorder_recipients(o,e,array[r]);
+ c:=public.al_save_contact(o,'Smoke kontakt','SMOKE@example.invalid','Test');
+ if c->>'email'<>'smoke@example.invalid' then raise exception 'CONTACT_NORMALIZATION';end if;
+ perform public.al_save_contact(o,'Smoke arkiverad','smoke@example.invalid','Test',(c->>'id')::uuid,1,true);
+ perform public.al_update_organization(o,'Smoke uppdaterad','000000-0000');
+ begin
+  perform public.al_set_member_role(o,'f8160001-0000-4000-8000-000000000001','reader',true);
+  raise exception 'OWNER_PROTECTION_MISSING';
+ exception when others then if sqlerrm<>'LAST_OWNER' then raise;end if;end;
+ u:=public.al_usage_summary(o,'2026-11-01','2026-12-01');
+ if (u->>'billing_enabled')::boolean or u->>'billing_model'<>'unconfigured' then raise exception 'BILLING_CHANGED';end if;
+ if jsonb_array_length(public.al_activity(o))<5 then raise exception 'AUDIT_MISSING';end if;
+ perform public.al_duplicate_draft(o,e,'Smoke kopia');
+ perform public.al_remove_recipient(o,e,r);
+end $$;
 reset role;
 rollback;

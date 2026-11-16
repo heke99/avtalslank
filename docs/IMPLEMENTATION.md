@@ -18,16 +18,37 @@ Adaptations: `.ts` imports for cross-runtime modules; Avtalslänk evidence schem
 - Worker leases are attempt-specific and checked on completion. Bytes are checked against stored size/hash and both malware and PDF tools must report before readiness.
 - Billing stays unconfigured. A payment provider, price and commercial model are intentionally absent.
 
+## Second implementation: workspace operations (2026-11-16)
+
+1. Recipient editing/removal: draft lock, normalized address, method selection and audit.
+2. Atomic recipient ordering: exact complete ID set, duplicate/foreign IDs rejected, deferred uniqueness; removal compacts order.
+3. Document detachment: draft-only; cancels scan job, retains original immutable object for later retention cleanup.
+4. PDF preview/download: private Storage read, ready-only, SHA-256 checked before object URL; URLs revoked on close/unmount.
+5. Draft copying: copies settings and pending recipients only; new ID, no evidence, files or usage carried forward.
+6. Contact register: create/edit, archive/restore, optimistic versions, normalized unique email per organization.
+7. Reusable contact picker with explicit signing-method selector before adding the recipient.
+8. Existing team roles: guarded changes/deactivation, organization lock for last-owner protection, no admin self-escalation. Team invitations are not implemented.
+9. Organization profile: admin-only update, name/registration bounds and audit.
+10. Field-template lifecycle: copy to independent template, version-checked deletion. These remain field schemas, not complete PDF templates.
+11. Activity: bounded keyset pagination and JSON export of the shown page set, explicitly not a signing evidence certificate.
+12. Usage: bounded reporting periods, server-recorded counters only, no selected price/provider/model or checkout.
+
+New features use new Avtalslänk code with existing tenant, audit and RPC primitives. No extra donor code or donor credentials were imported. Source repositories remain untouched. The original 18 ports remain pinned and digest-verified in reuse-manifest.json.
+
 ## Verification record
 
-Local verification: 20 domain/security/PostgreSQL tests passed, including two tenants, reader denial, immutable uploads, scoped/revoked API keys, idempotency, worker lease binding and unconfigured billing. Type checking and production build passed. Production dependency audit: 0 vulnerabilities after updating Zod to 4.6.7.
+Local: 32 domain/security/PostgreSQL tests passed; TypeScript checks for web/worker/Edge and production build passed. Twelve added SQL scenarios include ordering, foreign IDs, contact conflicts, owner protection, document detachment, API scopes/idempotency, activity paging and undecided billing. Provenance: 18 pinned ports verified.
 
-Hosted verification: both migrations applied to Avtalslank Supabase. RLS is enabled on all 11 public tables, private document bucket verified, transactional hosted two-tenant smoke test passed and rolled back. Supabase security advisors returned zero findings after moving privileged implementations into the private schema and exposing invoker wrappers. Edge API v2 deployed: health 200; unauthenticated envelope API 401.
+CI: [run 43823147474](https://github.com/heke99/avtalslank/actions/runs/43823147474) passed at commit e3c8019e5675999151995a4781cc98069e534c18, including 32 code/database tests and five Chromium UI tests. Browser tests use mocked transport; they do not prove live Supabase login, provider signatures or email delivery. Screenshots are available in the browser-verification Actions artifact. Local Chromium remains blocked by this workspace's socket restrictions; CI supplies the browser verification.
 
-Railway: private project `d6d18789-7d93-4c36-ab98-6bdff50109fe`, staging `30204f54-6210-480f-9f3d-e1047e15fccb`, empty document-worker service `e73cd74a-3a1d-437e-86e4-ed1709a59ded`. No worker deployment is claimed before credentials and scanner configuration.
+Hosted: third migration workspace_operations applied. Transactional two-tenant smoke expanded with editing, ordering, contacts, profile, last-owner protection, usage, copying and removal; passed with all synthetic records rolled back. Supabase security advisors: zero findings. API v3 ACTIVE; health 200, unauthenticated resources 401 and fake API key on /v1/methods 401.
 
-Local browser suite could not start Chromium because the execution environment denies its process-singleton socket. Cloud browser could not reach this workspace's loopback. GitHub Actions includes the same browser suite on an independent runner, but no CI run is claimed: publication was blocked before push. Local Deno could not reach the npm registry; the Edge source was typechecked against installed SDK types and successfully bundled/deployed by Supabase. Container/BankID/Freja production checks are NOT RUN until configured. Browser network doubles verify UI behavior only; they are not production auth/provider evidence.
+Web: Vercel project prj_QstypXKAzXe8Yy3cEX22lEmemfmJ, deployed from e3c8019e5675999151995a4781cc98069e534c18; deployment dpl_2g43jh1mLkT6sBWaZWN2oAEB9VnV READY. URL https://avtalslank.vercel.app. Vercel reports production target on its generated hostname; no custom domain or existing OPS DNS was changed. Live login page inspected visually in browser; workspace UI covered in mocked CI scenarios. No production sign-in credentials were created for review.
 
-## Publication status
+Railway: private project d6d18789-7d93-4c36-ab98-6bdff50109fe, staging 30204f54-6210-480f-9f3d-e1047e15fccb, empty document-worker e73cd74a-3a1d-437e-86e4-ed1709a59ded. Worker is NOT deployed/running: its own Supabase server credentials and scanner configuration remain to be provisioned. Documents therefore cannot currently pass the pending scan stage in production.
 
-The implementation is committed locally. Automatic approval review rejected the push to the public `heke99/avtalslank` repository because the request to build was not considered explicit approval to publicly publish organizational code/metadata. No alternative upload path is used. User approval for public publication is required before pushing or running GitHub Actions. Existing donor repositories were not changed.
+## Publication and next work
+
+User explicitly approved public publication on 2026-11-16. Foundation and second implementation are published to heke99/avtalslank through the GitHub connection. The prior publication block is resolved.
+
+Not production-ready for signing: public signer sessions, delivery/email, verified BankID/Freja configuration and evidence verification, final PDF/evidence production, full PDF field placement, team invitations, webhook delivery, API file upload, retention cleanup and payment checkout remain. All signing methods remain disabled until those paths are verified. Contact/team/organization administration does not activate signing or payments.

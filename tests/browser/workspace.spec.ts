@@ -41,13 +41,49 @@ async function workspace(page: Page) {
       return route.fulfill({ status: 204, headers });
     let value: unknown = [];
     if (path.endsWith("/al_organizations")) {
-      const o={ id: org, name: "Testföretaget", registration_number: "000000-0000" };
-      value=req.headers()['accept']?.includes('vnd.pgrst.object')?o:[o];
-    } else if(path.endsWith('/al_memberships'))value=[{organization_id:org,user_id:'22222222-2222-4222-8222-222222222222',role:'owner',active:true}];
-    else if(path.endsWith('/al_contacts'))value=contacts;
-    else if(path.endsWith('/al_save_contact')){const b=req.postDataJSON();value={id:b.p_id??crypto.randomUUID(),name:b.p_name,email:b.p_email,company:b.p_company,version:1,archived:false};contacts=[value as Record<string,unknown>];}
-    else if(path.endsWith('/al_usage_summary'))value={billing_model:'unconfigured',billing_enabled:false,counts:{}};
-    else if(path.endsWith('/al_activity'))value=[{id:'event-1',kind:'organization.created',created_at:new Date().toISOString(),actor_id:null,metadata:{}}];
+      const o = {
+        id: org,
+        name: "Testföretaget",
+        registration_number: "000000-0000",
+      };
+      value = req.headers()["accept"]?.includes("vnd.pgrst.object") ? o : [o];
+    } else if (path.endsWith("/al_memberships"))
+      value = [
+        {
+          organization_id: org,
+          user_id: "22222222-2222-4222-8222-222222222222",
+          role: "owner",
+          active: true,
+        },
+      ];
+    else if (path.endsWith("/al_contacts")) value = contacts;
+    else if (path.endsWith("/al_save_contact")) {
+      const b = req.postDataJSON();
+      value = {
+        id: b.p_id ?? crypto.randomUUID(),
+        name: b.p_name,
+        email: b.p_email,
+        company: b.p_company,
+        version: 1,
+        archived: false,
+      };
+      contacts = [value as Record<string, unknown>];
+    } else if (path.endsWith("/al_usage_summary"))
+      value = {
+        billing_model: "unconfigured",
+        billing_enabled: false,
+        counts: {},
+      };
+    else if (path.endsWith("/al_activity"))
+      value = [
+        {
+          id: "event-1",
+          kind: "organization.created",
+          created_at: new Date().toISOString(),
+          actor_id: null,
+          metadata: {},
+        },
+      ];
     else if (path.endsWith("/al_envelopes")) value = envelopes;
     else if (path.endsWith("/al_recipients")) value = recipients;
     else if (path.endsWith("/al_templates")) value = templates;
@@ -92,6 +128,14 @@ async function workspace(page: Page) {
         status: "pending",
       };
       recipients.push(value as Record<string, unknown>);
+    } else if(path.endsWith('/al_edit_recipient')){
+      const b=req.postDataJSON();const r=recipients.find(r=>r.id===b.p_id)!;Object.assign(r,{name:b.p_name,email:b.p_email,method:b.p_method});value=r;
+    } else if(path.endsWith('/al_remove_recipient')){
+      const b=req.postDataJSON();recipients=recipients.filter(r=>r.id!==b.p_id);recipients.forEach((r,i)=>r.position=i+1);value={removed:b.p_id};
+    } else if(path.endsWith('/al_reorder_recipients')){
+      const b=req.postDataJSON();recipients=b.p_ids.map((id:string,i:number)=>({...recipients.find(r=>r.id===id),position:i+1}));value=b.p_ids;
+    } else if(path.endsWith('/al_duplicate_draft')){
+      const b=req.postDataJSON();value={...envelopes[0],id:crypto.randomUUID(),title:b.p_title};envelopes.push(value as Record<string,unknown>);
     } else if (path.endsWith("/al_save_template")) {
       const b = req.postDataJSON();
       value = {
@@ -136,7 +180,9 @@ test("desktop workspace: draft, Freja selection, readiness block, fields, billin
   await page
     .getByLabel("E-post", { exact: true })
     .fill("mottagare@example.invalid");
-  await page.getByLabel("Signeringsmetod").selectOption("freja");
+  await page
+    .getByLabel("Signeringsmetod", { exact: true })
+    .selectOption("freja");
   await page.getByRole("button", { name: "Lägg till mottagare" }).click();
   await expect(page.getByText("Freja eID", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Granska & skicka/ }).click();
@@ -220,20 +266,56 @@ test("desktop empty state uses real counts and provides a primary action", async
   });
 });
 
-test('workspace operations: contacts, team guard and usage without billing',async({page})=>{
+test("workspace operations: contacts, team guard and usage without billing", async ({
+  page,
+}) => {
+  await workspace(page);
+  await page
+    .getByRole("button", { name: "Företag & team", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Företagets arbetsyta" }),
+  ).toBeVisible();
+  await page.getByLabel("Namn", { exact: true }).fill("Kontakt Anna");
+  await page.getByLabel("E-post", { exact: true }).fill("anna@example.invalid");
+  await page.getByLabel("Företag", { exact: true }).fill("Annas AB");
+  await page.getByRole("button", { name: "Spara kontakt" }).click();
+  await expect(page.getByText("Kontakt Anna", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Team", exact: true }).click();
+  await expect(page.getByText("Du", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Användning", exact: true }).click();
+  await page.getByRole("button", { name: "Visa användning" }).click();
+  await expect(page.getByText(/Antalen är inte en faktura/)).toBeVisible();
+  await page.getByRole("tab", { name: "Aktivitetslogg", exact: true }).click();
+  await expect(
+    page.getByText("organization.created", { exact: true }),
+  ).toBeVisible();
+});
+
+test('recipient editing, ordering, removal and draft copying refresh the editor',async({page})=>{
  await workspace(page);
- await page.getByRole('button',{name:'Företag & team',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Företagets arbetsyta'})).toBeVisible();
- await page.getByLabel('Namn',{exact:true}).fill('Kontakt Anna');
- await page.getByLabel('E-post',{exact:true}).fill('anna@example.invalid');
- await page.getByLabel('Företag',{exact:true}).fill('Annas AB');
- await page.getByRole('button',{name:'Spara kontakt'}).click();
- await expect(page.getByText('Kontakt Anna',{exact:true})).toBeVisible();
- await page.getByRole('tab',{name:'Team',exact:true}).click();
- await expect(page.getByText('Du',{exact:true})).toBeVisible();
- await page.getByRole('tab',{name:'Användning',exact:true}).click();
- await page.getByRole('button',{name:'Visa användning'}).click();
- await expect(page.getByText(/Antalen är inte en faktura/)).toBeVisible();
- await page.getByRole('tab',{name:'Aktivitetslogg',exact:true}).click();
- await expect(page.getByText('organization.created',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();
+ await page.getByLabel('Avtalets namn').fill('Originalavtal');
+ await page.getByRole('button',{name:'Skapa utkast'}).click();
+ await page.getByRole('button',{name:'Till mottagare'}).click();
+ for(const [name,email] of [['Person Ett','one@example.invalid'],['Person Två','two@example.invalid']]){
+  await page.getByLabel('Namn',{exact:true}).fill(name);await page.getByLabel('E-post',{exact:true}).fill(email);await page.getByRole('button',{name:'Lägg till mottagare',exact:true}).click();
+  await expect(page.getByText(name,{exact:true})).toBeVisible();
+ }
+ await page.getByRole('button',{name:'Flytta upp Person Två',exact:true}).click();
+ const first=page.locator('.list-row').filter({hasText:'Person Två'});
+ await expect(first.locator('.recipient-number')).toHaveText('1');
+ await first.getByRole('button',{name:'Redigera',exact:true}).click();
+ await first.getByLabel('Namn',{exact:true}).fill('Redigerad Person');
+ await first.getByLabel('Signeringsmetod',{exact:true}).selectOption('freja');
+ await first.getByRole('button',{name:'Spara mottagare'}).click();
+ await expect(page.getByText('Redigerad Person',{exact:true})).toBeVisible();
+ await page.locator('.list-row').filter({hasText:'Person Ett'}).getByRole('button',{name:'Ta bort',exact:true}).click();
+ await expect(page.getByText('Person Ett',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Kopiera till nytt utkast'}).click();
+ await page.getByLabel('Nytt avtalsnamn').fill('Nytt kopierat avtal');
+ await page.getByRole('button',{name:'Skapa kopia',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Nytt kopierat avtal',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:/Uppgifter/}).click();
+ await expect(page.getByLabel('Avtalets namn')).toHaveValue('Nytt kopierat avtal');
 });

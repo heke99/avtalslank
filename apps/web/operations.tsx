@@ -1,66 +1,830 @@
-import React, { useEffect, useState } from 'react';
-import { supabase, rpc } from './client';
-import { methodLabels, type SigningMethod } from '../../packages/domain/src/index.ts';
-import { sha256Hex } from '../../packages/crypto/src/hash.ts';
-type Action = (fn:()=>Promise<void>)=>Promise<void>;
-type Recipient = {id:string;name:string;email:string;method:SigningMethod;position:number};
-type Contact = {id:string;name:string;email:string;company:string;version:number;archived:boolean};
-type Member = {user_id:string;role:string;active:boolean};
-type Activity = {id:string;kind:string;created_at:string;actor_id:string|null;metadata:unknown};
-export function downloadJson(name:string,data:unknown) {
- const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
- const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+import React, { useEffect, useState } from "react";
+import { supabase, rpc } from "./client";
+import {
+  methodLabels,
+  type SigningMethod,
+} from "../../packages/domain/src/index.ts";
+import { sha256Hex } from "../../packages/crypto/src/hash.ts";
+type Action = (fn: () => Promise<void>) => Promise<void>;
+type Recipient = {
+  id: string;
+  name: string;
+  email: string;
+  method: SigningMethod;
+  position: number;
+};
+type Contact = {
+  id: string;
+  name: string;
+  email: string;
+  company: string;
+  version: number;
+  archived: boolean;
+};
+type Member = { user_id: string; role: string; active: boolean };
+type Activity = {
+  id: string;
+  kind: string;
+  created_at: string;
+  actor_id: string | null;
+  metadata: unknown;
+};
+export function downloadJson(name: string, data: unknown) {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function RecipientTools({orgId,envelopeId,recipient:r,recipients,reload,action,busy}:{orgId:string;envelopeId:string;recipient:Recipient;recipients:Recipient[];reload:()=>Promise<void>;action:Action;busy:boolean}){
- const [editing,setEditing]=useState(false);
- const base={p_org:orgId,p_envelope:envelopeId};
- return <div className="operation-tools">
- <button className="secondary" disabled={busy||r.position===1} aria-label={`Flytta upp ${r.name}`} onClick={()=>action(async()=>{const ids=recipients.map(x=>x.id);const i=ids.indexOf(r.id);[ids[i-1],ids[i]]=[ids[i],ids[i-1]];await rpc('al_reorder_recipients',{...base,p_ids:ids});await reload();})}>↑</button>
- <button className="secondary" disabled={busy} onClick={()=>setEditing(!editing)}>Redigera</button>
- <button className="secondary" disabled={busy} onClick={()=>action(async()=>{await rpc('al_remove_recipient',{...base,p_id:r.id});await reload();})}>Ta bort</button>
- {editing&&<form className="operation-form" onSubmit={ev=>{ev.preventDefault();const f=new FormData(ev.currentTarget);action(async()=>{await rpc('al_edit_recipient',{...base,p_id:r.id,p_name:f.get('name'),p_email:f.get('email'),p_method:f.get('method')});setEditing(false);await reload();});}}>
- <label>Namn<input name="name" defaultValue={r.name} required minLength={2} maxLength={120}/></label>
- <label>E-post<input name="email" type="email" defaultValue={r.email} required maxLength={254}/></label>
- <label>Signeringsmetod<select name="method" defaultValue={r.method}>{Object.entries(methodLabels).map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label>
- <button className="primary" disabled={busy}>Spara mottagare</button></form>}
- </div>;
+export function RecipientTools({
+  orgId,
+  envelopeId,
+  recipient: r,
+  recipients,
+  reload,
+  action,
+  busy,
+}: {
+  orgId: string;
+  envelopeId: string;
+  recipient: Recipient;
+  recipients: Recipient[];
+  reload: () => Promise<void>;
+  action: Action;
+  busy: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const base = { p_org: orgId, p_envelope: envelopeId };
+  return (
+    <div className="operation-tools">
+      <button
+        className="secondary"
+        disabled={busy || r.position === 1}
+        aria-label={`Flytta upp ${r.name}`}
+        onClick={() =>
+          action(async () => {
+            const ids = recipients.map((x) => x.id);
+            const i = ids.indexOf(r.id);
+            [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]];
+            await rpc("al_reorder_recipients", { ...base, p_ids: ids });
+            await reload();
+          })
+        }
+      >
+        ↑
+      </button>
+      <button
+        className="secondary"
+        disabled={busy}
+        onClick={() => setEditing(!editing)}
+      >
+        Redigera
+      </button>
+      <button
+        className="secondary"
+        disabled={busy}
+        onClick={() =>
+          action(async () => {
+            await rpc("al_remove_recipient", { ...base, p_id: r.id });
+            await reload();
+          })
+        }
+      >
+        Ta bort
+      </button>
+      {editing && (
+        <form
+          className="operation-form"
+          onSubmit={(ev) => {
+            ev.preventDefault();
+            const f = new FormData(ev.currentTarget);
+            action(async () => {
+              await rpc("al_edit_recipient", {
+                ...base,
+                p_id: r.id,
+                p_name: f.get("name"),
+                p_email: f.get("email"),
+                p_method: f.get("method"),
+              });
+              setEditing(false);
+              await reload();
+            });
+          }}
+        >
+          <label>
+            Namn
+            <input
+              name="name"
+              defaultValue={r.name}
+              required
+              minLength={2}
+              maxLength={120}
+            />
+          </label>
+          <label>
+            E-post
+            <input
+              name="email"
+              type="email"
+              defaultValue={r.email}
+              required
+              maxLength={254}
+            />
+          </label>
+          <label>
+            Signeringsmetod
+            <select name="method" defaultValue={r.method}>
+              {Object.entries(methodLabels).map(([k, v]) => (
+                <option value={k} key={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="primary" disabled={busy}>
+            Spara mottagare
+          </button>
+        </form>
+      )}
+    </div>
+  );
 }
-export function DocumentTools({orgId,envelopeId,document:d,locked,action,reload,busy}:{orgId:string;envelopeId:string;document:{id:string;name:string;status:string;storage_path:string;sha256:string};locked:boolean;action:Action;reload:()=>Promise<void>;busy:boolean}){
- const [preview,setPreview]=useState<string|null>(null);
- useEffect(()=>()=>{if(preview)URL.revokeObjectURL(preview);},[preview]);
- return <div className="operation-tools"><button className="secondary" disabled={busy||d.status!=='ready'} onClick={()=>action(async()=>{const {data,error}=await supabase.storage.from('al-documents').download(d.storage_path);if(error)throw error;if(await sha256Hex(new Uint8Array(await data.arrayBuffer()))!==d.sha256)throw new Error('Dokumentets kontrollsumma stämmer inte.');setPreview(URL.createObjectURL(new Blob([data],{type:'application/pdf'})));})}>Förhandsvisa PDF</button>
- {!locked&&<button className="secondary" disabled={busy} onClick={()=>action(async()=>{await rpc('al_remove_document',{p_org:orgId,p_envelope:envelopeId,p_id:d.id});await reload();})}>Ta bort från utkast</button>}
- {preview&&<div className="pdf-preview"><button className="secondary" onClick={()=>setPreview(null)}>Stäng förhandsvisning</button><iframe title={`PDF: ${d.name}`} src={preview}/><a href={preview} download={d.name}>Hämta PDF</a></div>}</div>;
+export function DocumentTools({
+  orgId,
+  envelopeId,
+  document: d,
+  locked,
+  action,
+  reload,
+  busy,
+}: {
+  orgId: string;
+  envelopeId: string;
+  document: {
+    id: string;
+    name: string;
+    status: string;
+    storage_path: string;
+    sha256: string;
+  };
+  locked: boolean;
+  action: Action;
+  reload: () => Promise<void>;
+  busy: boolean;
+}) {
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
+  return (
+    <div className="operation-tools">
+      <button
+        className="secondary"
+        disabled={busy || d.status !== "ready"}
+        onClick={() =>
+          action(async () => {
+            const { data, error } = await supabase.storage
+              .from("al-documents")
+              .download(d.storage_path);
+            if (error) throw error;
+            if (
+              (await sha256Hex(new Uint8Array(await data.arrayBuffer()))) !==
+              d.sha256
+            )
+              throw new Error("Dokumentets kontrollsumma stämmer inte.");
+            setPreview(
+              URL.createObjectURL(
+                new Blob([data], { type: "application/pdf" }),
+              ),
+            );
+          })
+        }
+      >
+        Förhandsvisa PDF
+      </button>
+      {!locked && (
+        <button
+          className="secondary"
+          disabled={busy}
+          onClick={() =>
+            action(async () => {
+              await rpc("al_remove_document", {
+                p_org: orgId,
+                p_envelope: envelopeId,
+                p_id: d.id,
+              });
+              await reload();
+            })
+          }
+        >
+          Ta bort från utkast
+        </button>
+      )}
+      {preview && (
+        <div className="pdf-preview">
+          <button className="secondary" onClick={() => setPreview(null)}>
+            Stäng förhandsvisning
+          </button>
+          <iframe title={`PDF: ${d.name}`} src={preview} />
+          <a href={preview} download={d.name}>
+            Hämta PDF
+          </a>
+        </div>
+      )}
+    </div>
+  );
 }
-export function DuplicateDraft({orgId,envelopeId,title,action,onSaved,busy}:{orgId:string;envelopeId:string;title:string;action:Action;onSaved:(v:any)=>void;busy:boolean}){
- const [open,setOpen]=useState(false);
- return <><button className="secondary" disabled={busy} onClick={()=>setOpen(!open)}>Kopiera till nytt utkast</button>{open&&<form className="operation-form" onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action(async()=>{const v=await rpc('al_duplicate_draft',{p_org:orgId,p_envelope:envelopeId,p_title:f.get('title')});setOpen(false);onSaved(v);});}}><p>Mottagare och inställningar kopieras. Lägg till PDF-filer på nytt i det nya utkastet.</p><label>Nytt avtalsnamn<input name="title" defaultValue={(title+' – kopia').slice(0,160)} required minLength={2} maxLength={160}/></label><button className="primary" disabled={busy}>Skapa kopia</button></form>}</>;
+export function DuplicateDraft({
+  orgId,
+  envelopeId,
+  title,
+  action,
+  onSaved,
+  busy,
+}: {
+  orgId: string;
+  envelopeId: string;
+  title: string;
+  action: Action;
+  onSaved: (v: any) => void;
+  busy: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        className="secondary"
+        disabled={busy}
+        onClick={() => setOpen(!open)}
+      >
+        Kopiera till nytt utkast
+      </button>
+      {open && (
+        <form
+          className="operation-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const f = new FormData(e.currentTarget);
+            action(async () => {
+              const v = await rpc("al_duplicate_draft", {
+                p_org: orgId,
+                p_envelope: envelopeId,
+                p_title: f.get("title"),
+              });
+              setOpen(false);
+              onSaved(v);
+            });
+          }}
+        >
+          <p>
+            Mottagare och inställningar kopieras. Lägg till PDF-filer på nytt i
+            det nya utkastet.
+          </p>
+          <label>
+            Nytt avtalsnamn
+            <input
+              name="title"
+              defaultValue={(title + " – kopia").slice(0, 160)}
+              required
+              minLength={2}
+              maxLength={160}
+            />
+          </label>
+          <button className="primary" disabled={busy}>
+            Skapa kopia
+          </button>
+        </form>
+      )}
+    </>
+  );
 }
-export function ContactPicker({orgId,onPick,action}:{orgId:string;onPick:(c:Contact)=>Promise<void>;action:Action}){
- const [contacts,setContacts]=useState<Contact[]>([]);
- useEffect(()=>{let active=true;action(async()=>{const {data,error}=await supabase.from('al_contacts').select('*').eq('organization_id',orgId).eq('archived',false).order('name').limit(200);if(error)throw error;if(active)setContacts(data??[]);});return()=>{active=false;};},[orgId]);
- return <label>Lägg till sparad kontakt<select defaultValue="" onChange={e=>{const c=contacts.find(c=>c.id===e.target.value);e.target.value='';if(c)action(()=>onPick(c));}}><option value="">Välj kontakt (metod väljs efteråt)</option>{contacts.map(c=><option key={c.id} value={c.id}>{c.name} · {c.email}</option>)}</select></label>;
+export function ContactPicker({
+  orgId,
+  onPick,
+  action,
+}: {
+  orgId: string;
+  onPick: (c: Contact, method: SigningMethod) => Promise<void>;
+  action: Action;
+}) {
+  const [contacts, setContacts] = useState<Contact[]>([]),
+    [method, setMethod] = useState<SigningMethod>("bankid");
+  useEffect(() => {
+    let active = true;
+    action(async () => {
+      const { data, error } = await supabase
+        .from("al_contacts")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("archived", false)
+        .order("name")
+        .limit(200);
+      if (error) throw error;
+      if (active) setContacts(data ?? []);
+    });
+    return () => {
+      active = false;
+    };
+  }, [orgId]);
+  return (
+    <div className="two-columns">
+      <label>
+        Signeringsmetod för sparad kontakt
+        <select
+          value={method}
+          onChange={(e) => setMethod(e.target.value as SigningMethod)}
+        >
+          {Object.entries(methodLabels).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Lägg till sparad kontakt
+        <select
+          defaultValue=""
+          onChange={(e) => {
+            const c = contacts.find((c) => c.id === e.target.value);
+            e.target.value = "";
+            if (c) action(() => onPick(c, method));
+          }}
+        >
+          <option value="">Välj kontakt</option>
+          {contacts.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} · {c.email}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
 }
-export function WorkspaceOperations({orgId,action,busy,reload}:{orgId:string;action:Action;busy:boolean;reload:()=>Promise<void>}){
- const [tab,setTab]=useState('contacts'),[contacts,setContacts]=useState<Contact[]>([]),[members,setMembers]=useState<Member[]>([]),[events,setEvents]=useState<Activity[]>([]),[summary,setSummary]=useState<any>(null),[org,setOrg]=useState<any>(null),[userId,setUserId]=useState(''),[edit,setEdit]=useState<Contact|null>(null),[showArchived,setShowArchived]=useState(false),[search,setSearch]=useState(''),[month,setMonth]=useState(()=>new Date().toISOString().slice(0,7));
- async function load(){
- const [c,m,o,u]=await Promise.all([supabase.from('al_contacts').select('*').eq('organization_id',orgId).order('name').limit(500),supabase.from('al_memberships').select('*').eq('organization_id',orgId),supabase.from('al_organizations').select('*').eq('id',orgId).single(),supabase.auth.getUser()]);
- if(c.error||m.error||o.error||u.error)throw c.error||m.error||o.error||u.error;
- setContacts(c.data??[]);setMembers(m.data??[]);setOrg(o.data);setUserId(u.data.user?.id??'');
- }
- useEffect(()=>{action(load);setEvents([]);setSummary(null);setEdit(null);},[orgId]);
- const role=members.find(m=>m.user_id===userId&&m.active)?.role;
- const writable=['owner','admin','sender'].includes(role??''),admin=['owner','admin'].includes(role??'');
- async function activity(more=false){const last=more?events.at(-1):null;const data=await rpc<Activity[]>('al_activity',{p_org:orgId,p_limit:50,p_before_time:last?.created_at??null,p_before_id:last?.id??null});setEvents(more?[...events,...data]:data);}
- return <section className="operations"><div className="section-heading"><h2>Företagets arbetsyta</h2><p className="muted">Kontakter, åtkomst och uppföljning på ett ställe.</p></div>
- <div className="operation-tabs" role="tablist" aria-label="Företagets arbetsyta">{[['contacts','Kontakter'],['team','Team'],['profile','Företagsprofil'],['activity','Aktivitetslogg'],['usage','Användning']].map(([id,label])=><button role="tab" aria-selected={tab===id} className={tab===id?'primary':'secondary'} key={id} onClick={()=>{setTab(id);if(id==='activity')action(()=>activity());}}>{label}</button>)}</div>
- {tab==='contacts'&&<><div className="two-columns"><label>Sök kontakt<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Namn, e-post eller företag"/></label><label><input type="checkbox" checked={showArchived} onChange={e=>setShowArchived(e.target.checked)}/> Visa arkiverade</label></div>
- <p className="muted">Visar upp till 500 kontakter.</p>
- {contacts.filter(c=>c.archived===showArchived&&[c.name,c.email,c.company].join(' ').toLocaleLowerCase('sv').includes(search.toLocaleLowerCase('sv'))).map(c=><div className="list-row" key={c.id}><span className="grow"><strong>{c.name}</strong><small>{c.email} · {c.company}</small></span>{writable&&<><button className="secondary" disabled={busy} onClick={()=>setEdit(c)}>Redigera</button><button className="secondary" disabled={busy} onClick={()=>action(async()=>{await rpc('al_save_contact',{p_org:orgId,p_id:c.id,p_version:c.version,p_name:c.name,p_email:c.email,p_company:c.company,p_archived:!c.archived});await load();})}>{c.archived?'Återställ':'Arkivera'}</button></>}</div>)}
- {writable&&<form className="operation-form" key={edit?.id??'new'} onSubmit={e=>{e.preventDefault();const form=e.currentTarget,f=new FormData(form);action(async()=>{await rpc('al_save_contact',{p_org:orgId,p_name:f.get('name'),p_email:f.get('email'),p_company:f.get('company'),p_id:edit?.id??null,p_version:edit?.version??null,p_archived:edit?.archived??false});setEdit(null);form.reset();await load();});}}><h3>{edit?'Redigera kontakt':'Ny kontakt'}</h3><div className="two-columns"><label>Namn<input name="name" defaultValue={edit?.name} required minLength={2} maxLength={120}/></label><label>E-post<input name="email" type="email" defaultValue={edit?.email} required maxLength={254}/></label></div><label>Företag<input name="company" defaultValue={edit?.company} maxLength={160}/></label><button className="primary" disabled={busy}>Spara kontakt</button>{edit&&<button type="button" className="secondary" onClick={()=>setEdit(null)}>Avbryt redigering</button>}</form>}</>}
- {tab==='team'&&<><p>Ägare hanterar administratörer. Administratörer kan ändra avsändare och läsare. Nya medlemmar bjuds ännu inte in här.</p>{members.map(m=><form className="list-row" key={m.user_id} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action(async()=>{await rpc('al_set_member_role',{p_org:orgId,p_user:m.user_id,p_role:f.get('role'),p_active:f.get('active')==='on'});await load();});}}><span className="grow"><strong>{m.user_id===userId?'Du':m.user_id}</strong><small>{m.active?'Aktiv':'Inaktiverad'}</small></span><label>Roll<select name="role" defaultValue={m.role} disabled={!admin||busy}>{[['owner','Ägare'],['admin','Administratör'],['sender','Avsändare'],['reader','Läsare']].map(([v,l])=><option value={v} key={v}>{l}</option>)}</select></label><label><input type="checkbox" name="active" defaultChecked={m.active} disabled={!admin||busy}/> Aktiv</label>{admin&&<button className="secondary" disabled={busy}>Spara roll</button>}</form>)}</>}
- {tab==='profile'&&org&&<form className="operation-form" key={org.id+org.name} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action(async()=>{await rpc('al_update_organization',{p_org:orgId,p_name:f.get('name'),p_registration_number:f.get('registration')});await load();await reload();});}}><label>Företagsnamn<input name="name" defaultValue={org.name} minLength={2} maxLength={120} required disabled={!admin}/></label><label>Organisationsnummer<input name="registration" defaultValue={org.registration_number??''} maxLength={30} disabled={!admin}/></label><button className="primary" disabled={!admin||busy}>Spara företagsprofil</button></form>}
- {tab==='activity'&&<><div className="operation-tools"><button className="secondary" disabled={busy} onClick={()=>action(()=>activity())}>Uppdatera</button><button className="secondary" disabled={!events.length} onClick={()=>downloadJson('avtalslank-aktivitet.json',{organizationId:orgId,exportedAt:new Date().toISOString(),scope:'Visade händelser, inte hela historiken',events})}>Exportera visade händelser</button></div>{events.map(e=><div className="list-row" key={e.id}><strong className="grow">{e.kind}</strong><time>{new Date(e.created_at).toLocaleString('sv-SE',{timeZone:'Europe/Stockholm'})}</time></div>)}{events.length>0&&<button className="secondary" disabled={busy} onClick={()=>action(()=>activity(true))}>Visa äldre händelser</button>}<p className="muted">Historiken visar systemhändelser. Den är inte ett signeringsbevis.</p></>}
- {tab==='usage'&&<><form className="operation-form" onSubmit={e=>{e.preventDefault();action(async()=>{const from=new Date(month+'-01T00:00:00Z'),to=new Date(from);to.setUTCMonth(to.getUTCMonth()+1);setSummary(await rpc('al_usage_summary',{p_org:orgId,p_from:from.toISOString(),p_to:to.toISOString()}));});}}><label>Månad<input type="month" value={month} onChange={e=>setMonth(e.target.value)} required/></label><button className="secondary" disabled={busy}>Visa användning</button></form>{summary&&<div className="operation-form"><h3>Registrerad användning</h3>{[['envelope_completed','Färdiga avtal'],['document_completed','Färdiga dokument'],['recipient_signed','Genomförda underskrifter']].map(([k,l])=><div className="list-row" key={k}><span className="grow">{l}</span><strong>{summary.counts[k]??0}</strong></div>)}<p>Betalning: {summary.billing_enabled?'Aktiverad':'Inte aktiverad'}. Prismodell: {summary.billing_model==='unconfigured'?'Inte bestämd':summary.billing_model}.</p><p className="muted">Antalen är inte en faktura. Abonnemang, dokumentpris och eventuell kombination kan läggas till senare.</p></div>}</>}
- </section>;
+export function WorkspaceOperations({
+  orgId,
+  action,
+  busy,
+  reload,
+}: {
+  orgId: string;
+  action: Action;
+  busy: boolean;
+  reload: () => Promise<void>;
+}) {
+  const [tab, setTab] = useState("contacts"),
+    [contacts, setContacts] = useState<Contact[]>([]),
+    [members, setMembers] = useState<Member[]>([]),
+    [events, setEvents] = useState<Activity[]>([]),
+    [summary, setSummary] = useState<any>(null),
+    [org, setOrg] = useState<any>(null),
+    [userId, setUserId] = useState(""),
+    [edit, setEdit] = useState<Contact | null>(null),
+    [showArchived, setShowArchived] = useState(false),
+    [search, setSearch] = useState(""),
+    [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  async function load() {
+    const [c, m, o, u] = await Promise.all([
+      supabase
+        .from("al_contacts")
+        .select("*")
+        .eq("organization_id", orgId)
+        .order("name")
+        .limit(500),
+      supabase.from("al_memberships").select("*").eq("organization_id", orgId),
+      supabase.from("al_organizations").select("*").eq("id", orgId).single(),
+      supabase.auth.getUser(),
+    ]);
+    if (c.error || m.error || o.error || u.error)
+      throw c.error || m.error || o.error || u.error;
+    setContacts(c.data ?? []);
+    setMembers(m.data ?? []);
+    setOrg(o.data);
+    setUserId(u.data.user?.id ?? "");
+  }
+  useEffect(() => {
+    action(load);
+    setEvents([]);
+    setSummary(null);
+    setEdit(null);
+  }, [orgId]);
+  const role = members.find((m) => m.user_id === userId && m.active)?.role;
+  const writable = ["owner", "admin", "sender"].includes(role ?? ""),
+    admin = ["owner", "admin"].includes(role ?? "");
+  async function activity(more = false) {
+    const last = more ? events.at(-1) : null;
+    const data = await rpc<Activity[]>("al_activity", {
+      p_org: orgId,
+      p_limit: 50,
+      p_before_time: last?.created_at ?? null,
+      p_before_id: last?.id ?? null,
+    });
+    setEvents(more ? [...events, ...data] : data);
+  }
+  return (
+    <section className="operations">
+      <div className="section-heading">
+        <h2>Företagets arbetsyta</h2>
+        <p className="muted">
+          Kontakter, åtkomst och uppföljning på ett ställe.
+        </p>
+      </div>
+      <div
+        className="operation-tabs"
+        role="tablist"
+        aria-label="Företagets arbetsyta"
+      >
+        {[
+          ["contacts", "Kontakter"],
+          ["team", "Team"],
+          ["profile", "Företagsprofil"],
+          ["activity", "Aktivitetslogg"],
+          ["usage", "Användning"],
+        ].map(([id, label]) => (
+          <button
+            role="tab"
+            aria-selected={tab === id}
+            className={tab === id ? "primary" : "secondary"}
+            key={id}
+            onClick={() => {
+              setTab(id);
+              if (id === "activity") action(() => activity());
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "contacts" && (
+        <>
+          <div className="two-columns">
+            <label>
+              Sök kontakt
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Namn, e-post eller företag"
+              />
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />{" "}
+              Visa arkiverade
+            </label>
+          </div>
+          <p className="muted">Visar upp till 500 kontakter.</p>
+          {contacts
+            .filter(
+              (c) =>
+                c.archived === showArchived &&
+                [c.name, c.email, c.company]
+                  .join(" ")
+                  .toLocaleLowerCase("sv")
+                  .includes(search.toLocaleLowerCase("sv")),
+            )
+            .map((c) => (
+              <div className="list-row" key={c.id}>
+                <span className="grow">
+                  <strong>{c.name}</strong>
+                  <small>
+                    {c.email} · {c.company}
+                  </small>
+                </span>
+                {writable && (
+                  <>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => setEdit(c)}
+                    >
+                      Redigera
+                    </button>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        action(async () => {
+                          await rpc("al_save_contact", {
+                            p_org: orgId,
+                            p_id: c.id,
+                            p_version: c.version,
+                            p_name: c.name,
+                            p_email: c.email,
+                            p_company: c.company,
+                            p_archived: !c.archived,
+                          });
+                          await load();
+                        })
+                      }
+                    >
+                      {c.archived ? "Återställ" : "Arkivera"}
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          {writable && (
+            <form
+              className="operation-form"
+              key={edit?.id ?? "new"}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget,
+                  f = new FormData(form);
+                action(async () => {
+                  await rpc("al_save_contact", {
+                    p_org: orgId,
+                    p_name: f.get("name"),
+                    p_email: f.get("email"),
+                    p_company: f.get("company"),
+                    p_id: edit?.id ?? null,
+                    p_version: edit?.version ?? null,
+                    p_archived: edit?.archived ?? false,
+                  });
+                  setEdit(null);
+                  form.reset();
+                  await load();
+                });
+              }}
+            >
+              <h3>{edit ? "Redigera kontakt" : "Ny kontakt"}</h3>
+              <div className="two-columns">
+                <label>
+                  Namn
+                  <input
+                    name="name"
+                    defaultValue={edit?.name}
+                    required
+                    minLength={2}
+                    maxLength={120}
+                  />
+                </label>
+                <label>
+                  E-post
+                  <input
+                    name="email"
+                    type="email"
+                    defaultValue={edit?.email}
+                    required
+                    maxLength={254}
+                  />
+                </label>
+              </div>
+              <label>
+                Företag
+                <input
+                  name="company"
+                  defaultValue={edit?.company}
+                  maxLength={160}
+                />
+              </label>
+              <button className="primary" disabled={busy}>
+                Spara kontakt
+              </button>
+              {edit && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setEdit(null)}
+                >
+                  Avbryt redigering
+                </button>
+              )}
+            </form>
+          )}
+        </>
+      )}
+      {tab === "team" && (
+        <>
+          <p>
+            Ägare hanterar administratörer. Administratörer kan ändra avsändare
+            och läsare. Nya medlemmar bjuds ännu inte in här.
+          </p>
+          {members.map((m) => (
+            <form
+              className="list-row"
+              key={m.user_id}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                action(async () => {
+                  await rpc("al_set_member_role", {
+                    p_org: orgId,
+                    p_user: m.user_id,
+                    p_role: f.get("role"),
+                    p_active: f.get("active") === "on",
+                  });
+                  await load();
+                });
+              }}
+            >
+              <span className="grow">
+                <strong>{m.user_id === userId ? "Du" : m.user_id}</strong>
+                <small>{m.active ? "Aktiv" : "Inaktiverad"}</small>
+              </span>
+              <label>
+                Roll
+                <select
+                  name="role"
+                  defaultValue={m.role}
+                  disabled={!admin || busy}
+                >
+                  {[
+                    ["owner", "Ägare"],
+                    ["admin", "Administratör"],
+                    ["sender", "Avsändare"],
+                    ["reader", "Läsare"],
+                  ].map(([v, l]) => (
+                    <option value={v} key={v}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  name="active"
+                  defaultChecked={m.active}
+                  disabled={!admin || busy}
+                />{" "}
+                Aktiv
+              </label>
+              {admin && (
+                <button className="secondary" disabled={busy}>
+                  Spara roll
+                </button>
+              )}
+            </form>
+          ))}
+        </>
+      )}
+      {tab === "profile" && org && (
+        <form
+          className="operation-form"
+          key={org.id + org.name}
+          onSubmit={(e) => {
+            e.preventDefault();
+            const f = new FormData(e.currentTarget);
+            action(async () => {
+              await rpc("al_update_organization", {
+                p_org: orgId,
+                p_name: f.get("name"),
+                p_registration_number: f.get("registration"),
+              });
+              await load();
+              await reload();
+            });
+          }}
+        >
+          <label>
+            Företagsnamn
+            <input
+              name="name"
+              defaultValue={org.name}
+              minLength={2}
+              maxLength={120}
+              required
+              disabled={!admin}
+            />
+          </label>
+          <label>
+            Organisationsnummer
+            <input
+              name="registration"
+              defaultValue={org.registration_number ?? ""}
+              maxLength={30}
+              disabled={!admin}
+            />
+          </label>
+          <button className="primary" disabled={!admin || busy}>
+            Spara företagsprofil
+          </button>
+        </form>
+      )}
+      {tab === "activity" && (
+        <>
+          <div className="operation-tools">
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => action(() => activity())}
+            >
+              Uppdatera
+            </button>
+            <button
+              className="secondary"
+              disabled={!events.length}
+              onClick={() =>
+                downloadJson("avtalslank-aktivitet.json", {
+                  organizationId: orgId,
+                  exportedAt: new Date().toISOString(),
+                  scope: "Visade händelser, inte hela historiken",
+                  events,
+                })
+              }
+            >
+              Exportera visade händelser
+            </button>
+          </div>
+          {events.map((e) => (
+            <div className="list-row" key={e.id}>
+              <strong className="grow">{e.kind}</strong>
+              <time>
+                {new Date(e.created_at).toLocaleString("sv-SE", {
+                  timeZone: "Europe/Stockholm",
+                })}
+              </time>
+            </div>
+          ))}
+          {events.length > 0 && (
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => action(() => activity(true))}
+            >
+              Visa äldre händelser
+            </button>
+          )}
+          <p className="muted">
+            Historiken visar systemhändelser. Den är inte ett signeringsbevis.
+          </p>
+        </>
+      )}
+      {tab === "usage" && (
+        <>
+          <form
+            className="operation-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              action(async () => {
+                const from = new Date(month + "-01T00:00:00Z"),
+                  to = new Date(from);
+                to.setUTCMonth(to.getUTCMonth() + 1);
+                setSummary(
+                  await rpc("al_usage_summary", {
+                    p_org: orgId,
+                    p_from: from.toISOString(),
+                    p_to: to.toISOString(),
+                  }),
+                );
+              });
+            }}
+          >
+            <label>
+              Månad
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                required
+              />
+            </label>
+            <button className="secondary" disabled={busy}>
+              Visa användning
+            </button>
+          </form>
+          {summary && (
+            <div className="operation-form">
+              <h3>Registrerad användning</h3>
+              {[
+                ["envelope_completed", "Färdiga avtal"],
+                ["document_completed", "Färdiga dokument"],
+                ["recipient_signed", "Genomförda underskrifter"],
+              ].map(([k, l]) => (
+                <div className="list-row" key={k}>
+                  <span className="grow">{l}</span>
+                  <strong>{summary.counts[k] ?? 0}</strong>
+                </div>
+              ))}
+              <p>
+                Betalning:{" "}
+                {summary.billing_enabled ? "Aktiverad" : "Inte aktiverad"}.
+                Prismodell:{" "}
+                {summary.billing_model === "unconfigured"
+                  ? "Inte bestämd"
+                  : summary.billing_model}
+                .
+              </p>
+              <p className="muted">
+                Antalen är inte en faktura. Abonnemang, dokumentpris och
+                eventuell kombination kan läggas till senare.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
 }

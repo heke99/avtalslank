@@ -350,95 +350,439 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     },
   );
 
-  let work:string,r1:string,r2:string,contact:string,template:string;
-  await t.test('recipient edits and ordering are atomic; malformed and foreign IDs are rejected',async()=>{
-    await actor(a);work=(await one("select public.al_save_draft($1,'Arbetsflöde') data",[oa])).data.id;
-    r1=(await one("select public.al_add_recipient($1,$2,'Person Ett','one@example.invalid','bankid',1) data",[oa,work])).data.id;
-    r2=(await one("select public.al_add_recipient($1,$2,'Person Två','two@example.invalid','freja',2) data",[oa,work])).data.id;
-    const edited=(await one("select public.al_edit_recipient($1,$2,$3,'Uppdaterad Person','NEW@example.invalid','drawn_signature') data",[oa,work,r1])).data;
-    assert.equal(edited.email,'new@example.invalid');assert.equal(edited.method,'drawn_signature');
-    await db.query('select public.al_reorder_recipients($1,$2,$3)',[oa,work,[r2,r1]]);
-    assert.equal((await one('select position from public.al_recipients where id=$1',[r2])).position,1);
-    for(const ids of [[r1,r1],[r1],['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',r2]])await assert.rejects(db.query('select public.al_reorder_recipients($1,$2,$3)',[oa,work,ids]),/INVALID_RECIPIENT_ORDER/);
-    await actor(b);await assert.rejects(db.query("select public.al_edit_recipient($1,$2,$3,'Intrång','x@example.invalid','bankid')",[oa,work,r1]),/ACCESS_DENIED/);
-  });
-  await t.test('removing a recipient compacts order without duplicate positions',async()=>{
-    await actor(a);await db.query('select public.al_remove_recipient($1,$2,$3)',[oa,work,r2]);
-    assert.equal((await one('select position from public.al_recipients where id=$1',[r1])).position,1);
-    await assert.rejects(db.query('select public.al_remove_recipient($1,$2,$3)',[oa,work,r2]),/RECIPIENT_NOT_FOUND/);
-  });
-  await t.test('document detach cancels durable scan jobs but keeps immutable original object',async()=>{
-    await actor(a);const id='dddddddd-dddd-4ddd-8ddd-dddddddddddd',path=`${oa}/${work}/${id}.pdf`;
-    await db.query("insert into storage.objects(bucket_id,name) values('al-documents',$1)",[path]);
-    await db.query("select public.al_register_document($1,$2,$3,'remove.pdf',$4,5)",[oa,work,id,'a'.repeat(64)]);
-    await db.query('select public.al_remove_document($1,$2,$3)',[oa,work,id]);
-    assert.equal((await db.query('select id from public.al_documents where id=$1',[id])).rows.length,0);
-    assert.equal((await db.query('select id from storage.objects where name=$1',[path])).rows.length,1);
-    await db.exec('reset role');assert.equal((await db.query('select id from al_private.jobs where document_id=$1',[id])).rows.length,0);
-  });
-  await t.test('copying creates fresh draft and pending recipients, never billing usage or documents',async()=>{
-    await actor(a);const copy=(await one("select public.al_duplicate_draft($1,$2,'Kopia') data",[oa,work])).data;
-    assert.equal(copy.status,'draft');assert.equal(copy.generation,1);assert.notEqual(copy.id,work);
-    assert.equal((await one('select status from public.al_recipients where envelope_id=$1',[copy.id])).status,'pending');
-    assert.equal((await db.query('select id from public.al_documents where envelope_id=$1',[copy.id])).rows.length,0);
-    assert.equal((await db.query('select id from public.al_usage_events where envelope_id=$1',[copy.id])).rows.length,0);
-  });
-  await t.test('contacts normalize addresses, reject stale updates and isolate tenant reads',async()=>{
-    await actor(a);const c=(await one("select public.al_save_contact($1,'Kontakt','CONTACT@example.invalid','AB') data",[oa])).data;contact=c.id;
-    assert.equal(c.email,'contact@example.invalid');
-    await db.query("select public.al_save_contact($1,'Kontakt Ny','contact@example.invalid','AB',$2,1,true)",[oa,contact]);
-    await assert.rejects(db.query("select public.al_save_contact($1,'Fel','contact@example.invalid','AB',$2,1,false)",[oa,contact]),/VERSION_CONFLICT/);
-    await actor(b);assert.equal((await db.query('select id from public.al_contacts where id=$1',[contact])).rows.length,0);
-    await assert.rejects(db.query("select public.al_save_contact($1,'Intrång','x@example.invalid')",[oa]),/ACCESS_DENIED/);
-  });
-  await t.test('organization profile is admin-only and reader cannot change contacts',async()=>{
-    await actor('33333333-3333-4333-8333-333333333333');
-    await assert.rejects(db.query("select public.al_update_organization($1,'Intrång','123')",[oa]),/ACCESS_DENIED/);
-    await assert.rejects(db.query("select public.al_save_contact($1,'Intrång','x@example.invalid')",[oa]),/ACCESS_DENIED/);
-    await actor(a);assert.equal((await one("select public.al_update_organization($1,'Företag Nytt','556855-4884') data",[oa])).data.name,'Företag Nytt');
-  });
-  await t.test('membership commands preserve last owner and prevent administrator escalation',async()=>{
-    await actor(a);await assert.rejects(db.query("select public.al_set_member_role($1,$2,'reader',true)",[oa,a]),/LAST_OWNER/);
-    await db.query("select public.al_set_member_role($1,'33333333-3333-4333-8333-333333333333','admin',true)",[oa]);
-    await actor('33333333-3333-4333-8333-333333333333');
-    await assert.rejects(db.query("select public.al_set_member_role($1,$2,'reader',true)",[oa,a]),/OWNER_REQUIRED/);
-    await assert.rejects(db.query("select public.al_set_member_role($1,'33333333-3333-4333-8333-333333333333','owner',true)",[oa]),/OWNER_REQUIRED/);
-    await actor(a);await db.query("select public.al_set_member_role($1,'33333333-3333-4333-8333-333333333333','reader',true)",[oa]);
-  });
-  await t.test('template deletion checks version and organization',async()=>{
-    await actor(a);template=(await one("select public.al_save_template($1,'Raderbar mall','[]') data",[oa])).data.id;
-    await assert.rejects(db.query('select public.al_delete_template($1,$2,2)',[oa,template]),/VERSION_CONFLICT/);
-    await actor(b);await assert.rejects(db.query('select public.al_delete_template($1,$2,1)',[oa,template]),/ACCESS_DENIED/);
-    await actor(a);await db.query('select public.al_delete_template($1,$2,1)',[oa,template]);
-  });
-  await t.test('activity keyset pages have no duplicates and never cross tenants',async()=>{
-    await actor(a);const first=(await one('select public.al_activity($1,3) data',[oa])).data;
-    const last=first.at(-1);const next=(await one('select public.al_activity($1,3,$2,$3) data',[oa,last.created_at,last.id])).data;
-    assert.equal(first.length,3);assert.equal(next.length,3);assert.equal(new Set([...first,...next].map(x=>x.id)).size,6);
-    assert.ok(first.every((x:any)=>x.organization_id===oa));await actor(b);await assert.rejects(db.query('select public.al_activity($1)',[oa]),/ACCESS_DENIED/);
-  });
-  await t.test('usage summary is read-only, period bounded, and billing stays undecided',async()=>{
-    await actor(a);const u=(await one("select public.al_usage_summary($1,'2026-11-01','2026-12-01') data",[oa])).data;
-    assert.equal(u.billing_model,'unconfigured');assert.equal(u.billing_enabled,false);assert.deepEqual(u.counts,{});
-    await assert.rejects(db.query("select public.al_usage_summary($1,'2025-01-01','2027-01-01')",[oa]),/INVALID_PERIOD/);
-    await actor(b);await assert.rejects(db.query("select public.al_usage_summary($1,'2026-11-01','2026-12-01')",[oa]),/ACCESS_DENIED/);
-  });
-  await t.test('extension API honors read scope, derives tenant, and deduplicates contact creation',async()=>{
-    await actor(a);const writeHash='b'.repeat(64),readHash='c'.repeat(64);
-    await db.query("select public.al_issue_api_key($1,'Operations','al_live_bbbbbbbb',$2,ARRAY['envelopes:read','envelopes:write','billing:read'])",[oa,writeHash]);
-    await db.query("select public.al_issue_api_key($1,'Read','al_live_cccccccc',$2,ARRAY['envelopes:read'])",[oa,readHash]);
-    await actor(a,'service_role');const payload={name:'API Kontakt',email:'api@example.invalid',organizationId:ob};
-    const c=(await one("select public.al_api_dispatch($1,'save_contact',$2,'contact-request-001') data",[writeHash,payload])).data;
-    assert.equal(c.organization_id,oa);
-    assert.equal((await one("select public.al_api_dispatch($1,'save_contact',$2,'contact-request-001') data",[writeHash,payload])).data.id,c.id);
-    const contacts=(await one("select public.al_api_dispatch($1,'list_contacts') data",[readHash])).data;assert.ok(contacts.every((c:any)=>c.organization_id===oa));
-    await assert.rejects(db.query("select public.al_api_dispatch($1,'save_contact',$2,'contact-request-002')",[readHash,{name:'Forbidden',email:'denied@example.invalid'}]),/SCOPE_DENIED/);
-    await assert.rejects(db.query("select public.al_api_dispatch($1,'usage_summary',$2)",[readHash,{from:'2026-11-01',to:'2026-12-01'}]),/SCOPE_DENIED/);
-  });
-  await t.test('all mutation commands refuse cancelled envelopes',async()=>{
-    await actor(a);await db.query('select public.al_cancel_envelope($1,$2)',[oa,work]);
-    for(const sql of ["select public.al_edit_recipient($1,$2,$3,'Låst','locked@example.invalid','freja')",'select public.al_remove_recipient($1,$2,$3)','select public.al_remove_document($1,$2,$3)'])await assert.rejects(db.query(sql,[oa,work,r1]),/DOCUMENT_LOCKED/);
-    await assert.rejects(db.query('select public.al_reorder_recipients($1,$2,$3)',[oa,work,[r1]]),/DOCUMENT_LOCKED/);
+  let work: string, r1: string, r2: string, contact: string, template: string;
+  await t.test(
+    "recipient edits and ordering are atomic; malformed and foreign IDs are rejected",
+    async () => {
+      await actor(a);
+      work = (
+        await one("select public.al_save_draft($1,'Arbetsflöde') data", [oa])
+      ).data.id;
+      r1 = (
+        await one(
+          "select public.al_add_recipient($1,$2,'Person Ett','one@example.invalid','bankid',1) data",
+          [oa, work],
+        )
+      ).data.id;
+      r2 = (
+        await one(
+          "select public.al_add_recipient($1,$2,'Person Två','two@example.invalid','freja',2) data",
+          [oa, work],
+        )
+      ).data.id;
+      const edited = (
+        await one(
+          "select public.al_edit_recipient($1,$2,$3,'Uppdaterad Person','NEW@example.invalid','drawn_signature') data",
+          [oa, work, r1],
+        )
+      ).data;
+      assert.equal(edited.email, "new@example.invalid");
+      assert.equal(edited.method, "drawn_signature");
+      await db.query("select public.al_reorder_recipients($1,$2,$3)", [
+        oa,
+        work,
+        [r2, r1],
+      ]);
+      assert.equal(
+        (
+          await one("select position from public.al_recipients where id=$1", [
+            r2,
+          ])
+        ).position,
+        1,
+      );
+      for (const ids of [
+        [r1, r1],
+        [r1],
+        ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", r2],
+      ])
+        await assert.rejects(
+          db.query("select public.al_reorder_recipients($1,$2,$3)", [
+            oa,
+            work,
+            ids,
+          ]),
+          /INVALID_RECIPIENT_ORDER/,
+        );
+      await actor(b);
+      await assert.rejects(
+        db.query(
+          "select public.al_edit_recipient($1,$2,$3,'Intrång','x@example.invalid','bankid')",
+          [oa, work, r1],
+        ),
+        /ACCESS_DENIED/,
+      );
+    },
+  );
+  await t.test(
+    "removing a recipient compacts order without duplicate positions",
+    async () => {
+      await actor(a);
+      await db.query("select public.al_remove_recipient($1,$2,$3)", [
+        oa,
+        work,
+        r2,
+      ]);
+      assert.equal(
+        (
+          await one("select position from public.al_recipients where id=$1", [
+            r1,
+          ])
+        ).position,
+        1,
+      );
+      await assert.rejects(
+        db.query("select public.al_remove_recipient($1,$2,$3)", [oa, work, r2]),
+        /RECIPIENT_NOT_FOUND/,
+      );
+    },
+  );
+  await t.test(
+    "document detach cancels durable scan jobs but keeps immutable original object",
+    async () => {
+      await actor(a);
+      const id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        path = `${oa}/${work}/${id}.pdf`;
+      await db.query(
+        "insert into storage.objects(bucket_id,name) values('al-documents',$1)",
+        [path],
+      );
+      await db.query(
+        "select public.al_register_document($1,$2,$3,'remove.pdf',$4,5)",
+        [oa, work, id, "a".repeat(64)],
+      );
+      await db.query("select public.al_remove_document($1,$2,$3)", [
+        oa,
+        work,
+        id,
+      ]);
+      assert.equal(
+        (await db.query("select id from public.al_documents where id=$1", [id]))
+          .rows.length,
+        0,
+      );
+      assert.equal(
+        (await db.query("select id from storage.objects where name=$1", [path]))
+          .rows.length,
+        1,
+      );
+      await db.exec("reset role");
+      assert.equal(
+        (
+          await db.query(
+            "select id from al_private.jobs where document_id=$1",
+            [id],
+          )
+        ).rows.length,
+        0,
+      );
+    },
+  );
+  await t.test(
+    "copying creates fresh draft and pending recipients, never billing usage or documents",
+    async () => {
+      await actor(a);
+      const copy = (
+        await one("select public.al_duplicate_draft($1,$2,'Kopia') data", [
+          oa,
+          work,
+        ])
+      ).data;
+      assert.equal(copy.status, "draft");
+      assert.equal(copy.generation, 1);
+      assert.notEqual(copy.id, work);
+      assert.equal(
+        (
+          await one(
+            "select status from public.al_recipients where envelope_id=$1",
+            [copy.id],
+          )
+        ).status,
+        "pending",
+      );
+      assert.equal(
+        (
+          await db.query(
+            "select id from public.al_documents where envelope_id=$1",
+            [copy.id],
+          )
+        ).rows.length,
+        0,
+      );
+      assert.equal(
+        (
+          await db.query(
+            "select id from public.al_usage_events where envelope_id=$1",
+            [copy.id],
+          )
+        ).rows.length,
+        0,
+      );
+    },
+  );
+  await t.test(
+    "contacts normalize addresses, reject stale updates and isolate tenant reads",
+    async () => {
+      await actor(a);
+      const c = (
+        await one(
+          "select public.al_save_contact($1,'Kontakt','CONTACT@example.invalid','AB') data",
+          [oa],
+        )
+      ).data;
+      contact = c.id;
+      assert.equal(c.email, "contact@example.invalid");
+      await db.query(
+        "select public.al_save_contact($1,'Kontakt Ny','contact@example.invalid','AB',$2,1,true)",
+        [oa, contact],
+      );
+      await assert.rejects(
+        db.query(
+          "select public.al_save_contact($1,'Fel','contact@example.invalid','AB',$2,1,false)",
+          [oa, contact],
+        ),
+        /VERSION_CONFLICT/,
+      );
+      await actor(b);
+      assert.equal(
+        (
+          await db.query("select id from public.al_contacts where id=$1", [
+            contact,
+          ])
+        ).rows.length,
+        0,
+      );
+      await assert.rejects(
+        db.query(
+          "select public.al_save_contact($1,'Intrång','x@example.invalid')",
+          [oa],
+        ),
+        /ACCESS_DENIED/,
+      );
+    },
+  );
+  await t.test(
+    "organization profile is admin-only and reader cannot change contacts",
+    async () => {
+      await actor("33333333-3333-4333-8333-333333333333");
+      await assert.rejects(
+        db.query("select public.al_update_organization($1,'Intrång','123')", [
+          oa,
+        ]),
+        /ACCESS_DENIED/,
+      );
+      await assert.rejects(
+        db.query(
+          "select public.al_save_contact($1,'Intrång','x@example.invalid')",
+          [oa],
+        ),
+        /ACCESS_DENIED/,
+      );
+      await actor(a);
+      assert.equal(
+        (
+          await one(
+            "select public.al_update_organization($1,'Företag Nytt','556855-4884') data",
+            [oa],
+          )
+        ).data.name,
+        "Företag Nytt",
+      );
+    },
+  );
+  await t.test(
+    "membership commands preserve last owner and prevent administrator escalation",
+    async () => {
+      await actor(a);
+      await assert.rejects(
+        db.query("select public.al_set_member_role($1,$2,'reader',true)", [
+          oa,
+          a,
+        ]),
+        /LAST_OWNER/,
+      );
+      await db.query(
+        "select public.al_set_member_role($1,'33333333-3333-4333-8333-333333333333','admin',true)",
+        [oa],
+      );
+      await actor("33333333-3333-4333-8333-333333333333");
+      await assert.rejects(
+        db.query("select public.al_set_member_role($1,$2,'reader',true)", [
+          oa,
+          a,
+        ]),
+        /OWNER_REQUIRED/,
+      );
+      await assert.rejects(
+        db.query(
+          "select public.al_set_member_role($1,'33333333-3333-4333-8333-333333333333','owner',true)",
+          [oa],
+        ),
+        /OWNER_REQUIRED/,
+      );
+      await actor(a);
+      await db.query(
+        "select public.al_set_member_role($1,'33333333-3333-4333-8333-333333333333','reader',true)",
+        [oa],
+      );
+    },
+  );
+  await t.test(
+    "template deletion checks version and organization",
+    async () => {
+      await actor(a);
+      template = (
+        await one(
+          "select public.al_save_template($1,'Raderbar mall','[]') data",
+          [oa],
+        )
+      ).data.id;
+      await assert.rejects(
+        db.query("select public.al_delete_template($1,$2,2)", [oa, template]),
+        /VERSION_CONFLICT/,
+      );
+      await actor(b);
+      await assert.rejects(
+        db.query("select public.al_delete_template($1,$2,1)", [oa, template]),
+        /ACCESS_DENIED/,
+      );
+      await actor(a);
+      await db.query("select public.al_delete_template($1,$2,1)", [
+        oa,
+        template,
+      ]);
+    },
+  );
+  await t.test(
+    "activity keyset pages have no duplicates and never cross tenants",
+    async () => {
+      await actor(a);
+      const first = (await one("select public.al_activity($1,3) data", [oa]))
+        .data;
+      const last = first.at(-1);
+      const next = (
+        await one("select public.al_activity($1,3,$2,$3) data", [
+          oa,
+          last.created_at,
+          last.id,
+        ])
+      ).data;
+      assert.equal(first.length, 3);
+      assert.equal(next.length, 3);
+      assert.equal(new Set([...first, ...next].map((x) => x.id)).size, 6);
+      assert.ok(first.every((x: any) => x.organization_id === oa));
+      await actor(b);
+      await assert.rejects(
+        db.query("select public.al_activity($1)", [oa]),
+        /ACCESS_DENIED/,
+      );
+    },
+  );
+  await t.test(
+    "usage summary is read-only, period bounded, and billing stays undecided",
+    async () => {
+      await actor(a);
+      const u = (
+        await one(
+          "select public.al_usage_summary($1,'2026-11-01','2026-12-01') data",
+          [oa],
+        )
+      ).data;
+      assert.equal(u.billing_model, "unconfigured");
+      assert.equal(u.billing_enabled, false);
+      assert.deepEqual(u.counts, {});
+      await assert.rejects(
+        db.query(
+          "select public.al_usage_summary($1,'2025-01-01','2027-01-01')",
+          [oa],
+        ),
+        /INVALID_PERIOD/,
+      );
+      await actor(b);
+      await assert.rejects(
+        db.query(
+          "select public.al_usage_summary($1,'2026-11-01','2026-12-01')",
+          [oa],
+        ),
+        /ACCESS_DENIED/,
+      );
+    },
+  );
+  await t.test(
+    "extension API honors read scope, derives tenant, and deduplicates contact creation",
+    async () => {
+      await actor(a);
+      const writeHash = "b".repeat(64),
+        readHash = "c".repeat(64);
+      await db.query(
+        "select public.al_issue_api_key($1,'Operations','al_live_bbbbbbbb',$2,ARRAY['envelopes:read','envelopes:write','billing:read'])",
+        [oa, writeHash],
+      );
+      await db.query(
+        "select public.al_issue_api_key($1,'Read','al_live_cccccccc',$2,ARRAY['envelopes:read'])",
+        [oa, readHash],
+      );
+      await actor(a, "service_role");
+      const payload = {
+        name: "API Kontakt",
+        email: "api@example.invalid",
+        organizationId: ob,
+      };
+      const c = (
+        await one(
+          "select public.al_api_dispatch($1,'save_contact',$2,'contact-request-001') data",
+          [writeHash, payload],
+        )
+      ).data;
+      assert.equal(c.organization_id, oa);
+      assert.equal(
+        (
+          await one(
+            "select public.al_api_dispatch($1,'save_contact',$2,'contact-request-001') data",
+            [writeHash, payload],
+          )
+        ).data.id,
+        c.id,
+      );
+      const contacts = (
+        await one("select public.al_api_dispatch($1,'list_contacts') data", [
+          readHash,
+        ])
+      ).data;
+      assert.ok(contacts.every((c: any) => c.organization_id === oa));
+      await assert.rejects(
+        db.query(
+          "select public.al_api_dispatch($1,'save_contact',$2,'contact-request-002')",
+          [readHash, { name: "Forbidden", email: "denied@example.invalid" }],
+        ),
+        /SCOPE_DENIED/,
+      );
+      await assert.rejects(
+        db.query("select public.al_api_dispatch($1,'usage_summary',$2)", [
+          readHash,
+          { from: "2026-11-01", to: "2026-12-01" },
+        ]),
+        /SCOPE_DENIED/,
+      );
+    },
+  );
+  await t.test("all mutation commands refuse cancelled envelopes", async () => {
+    await actor(a);
+    await db.query("select public.al_cancel_envelope($1,$2)", [oa, work]);
+    for (const sql of [
+      "select public.al_edit_recipient($1,$2,$3,'Låst','locked@example.invalid','freja')",
+      "select public.al_remove_recipient($1,$2,$3)",
+      "select public.al_remove_document($1,$2,$3)",
+    ])
+      await assert.rejects(db.query(sql, [oa, work, r1]), /DOCUMENT_LOCKED/);
+    await assert.rejects(
+      db.query("select public.al_reorder_recipients($1,$2,$3)", [
+        oa,
+        work,
+        [r1],
+      ]),
+      /DOCUMENT_LOCKED/,
+    );
   });
   await db.close();
 });

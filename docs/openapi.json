@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Avtalsl\u00e4nk API",
-    "version": "0.1.0",
-    "description": "Draft/preparation foundation. Production signing, document API upload, full template API and payment checkout are not enabled."
+    "title": "Avtalslänk API",
+    "version": "0.2.0",
+    "description": "Standalone workspace and draft API. Production sending, public signing, API file upload and payment checkout remain disabled. API-key POST calls require Idempotency-Key. User tokens require organizationId and verified membership."
   },
   "servers": [
     {
@@ -20,7 +20,7 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Avtalsl\u00e4nk scoped API key or Supabase user access token; API keys derive organization server-side."
+        "description": "Avtalslänk scoped API key or Supabase user access token; API keys derive organization server-side."
       }
     }
   },
@@ -258,6 +258,659 @@
           },
           "422": {
             "description": "Delivery/provider not configured"
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/edit-recipient": {
+      "post": {
+        "summary": "Edit a draft recipient",
+        "description": "Required API-key scope: envelopes:write. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required for API keys; 8–120 characters. Same action and key must carry identical payload.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "recipient": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "email",
+                      "method"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 120
+                      },
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "method": {
+                        "enum": [
+                          "bankid",
+                          "freja",
+                          "email_approval",
+                          "drawn_signature"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "recipient"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/remove-recipient": {
+      "post": {
+        "summary": "Remove recipient and compact order",
+        "description": "Required API-key scope: envelopes:write. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required for API keys; 8–120 characters. Same action and key must carry identical payload.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/remove-document": {
+      "post": {
+        "summary": "Detach draft document; retain original storage object",
+        "description": "Required API-key scope: envelopes:write. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required for API keys; 8–120 characters. Same action and key must carry identical payload.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/reorder-recipients": {
+      "post": {
+        "summary": "Replace complete recipient order atomically",
+        "description": "Required API-key scope: envelopes:write. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required for API keys; 8–120 characters. Same action and key must carry identical payload.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 50,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/duplicate": {
+      "post": {
+        "summary": "Copy settings and pending recipients to a new draft, without documents or signatures",
+        "description": "Required API-key scope: envelopes:write. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required for API keys; 8–120 characters. Same action and key must carry identical payload.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 160
+                  }
+                },
+                "required": [
+                  "title"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/contacts": {
+      "get": {
+        "summary": "List up to 200 active contacts ordered by name",
+        "description": "Required API-key scope: envelopes:read. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create, edit, archive or restore a contact; edit requires current version",
+        "description": "Required API-key scope: envelopes:write. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required for API keys; 8–120 characters. Same action and key must carry identical payload.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "company": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "archived": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "email"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/activity": {
+      "get": {
+        "summary": "Read activity using keyset pagination; export is not signing evidence",
+        "description": "Required API-key scope: envelopes:read. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "beforeTime",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "beforeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/usage": {
+      "get": {
+        "summary": "Count server-recorded usage in [from,to), maximum 366 days; no pricing or charges",
+        "description": "Required API-key scope: billing:read. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/templates": {
+      "get": {
+        "summary": "List up to 200 field templates",
+        "description": "Required API-key scope: templates:read. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create or version-check update a field template",
+        "description": "Required API-key scope: templates:write. Organization is always derived from the API key.",
+        "responses": {
+          "200": {
+            "description": "Organization-bound result"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Scope or membership denied"
+          },
+          "409": {
+            "description": "Conflict or stale version"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required for API keys; 8–120 characters. Same action and key must carry identical payload.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 160
+                  },
+                  "fields": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "name",
+                  "fields"
+                ]
+              }
+            }
           }
         }
       }

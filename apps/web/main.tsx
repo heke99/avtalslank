@@ -47,7 +47,13 @@ import {
 } from "../../packages/domain/src/index.ts";
 import { sha256Hex } from "../../packages/crypto/src/hash.ts";
 import "./styles.css";
-import { WorkspaceOperations, RecipientTools, DocumentTools, DuplicateDraft, ContactPicker } from "./operations";
+import {
+  WorkspaceOperations,
+  RecipientTools,
+  DocumentTools,
+  DuplicateDraft,
+  ContactPicker,
+} from "./operations";
 type Envelope = {
   id: string;
   organization_id: string;
@@ -334,6 +340,7 @@ function App() {
             </div>
           ) : selected ? (
             <EnvelopeDetail
+              key={selected.id}
               envelope={selected}
               orgId={orgId}
               capabilities={capabilities}
@@ -592,7 +599,15 @@ function App() {
               {view === "developers" && (
                 <Developer orgId={orgId} action={action} busy={busy} />
               )}
-              {view === "workspace" && <WorkspaceOperations key={orgId} orgId={orgId} action={action} busy={busy} reload={reload} />}
+              {view === "workspace" && (
+                <WorkspaceOperations
+                  key={orgId}
+                  orgId={orgId}
+                  action={action}
+                  busy={busy}
+                  reload={reload}
+                />
+              )}
               {view === "settings" && (
                 <SettingsView
                   org={org}
@@ -1142,7 +1157,14 @@ function EnvelopeDetail({
         </div>
         <Status status={e.status} />
       </div>
-      <DuplicateDraft orgId={orgId} envelopeId={e.id} title={e.title} action={action} busy={busy} onSaved={onSaved}/>
+      <DuplicateDraft
+        orgId={orgId}
+        envelopeId={e.id}
+        title={e.title}
+        action={action}
+        busy={busy}
+        onSaved={onSaved}
+      />
       <div className="steps">
         {["Dokument", "Mottagare & metod", "Uppgifter", "Granska & skicka"].map(
           (s, i) => (
@@ -1212,7 +1234,15 @@ function EnvelopeDetail({
             )}
             {documents.map((d) => (
               <div className="list-row" key={d.id}>
-                <DocumentTools orgId={orgId} envelopeId={e.id} document={d} locked={locked} action={action} reload={load} busy={busy}/>
+                <DocumentTools
+                  orgId={orgId}
+                  envelopeId={e.id}
+                  document={d}
+                  locked={locked}
+                  action={action}
+                  reload={load}
+                  busy={busy}
+                />
                 <span className="file-icon">
                   <FileText />
                 </span>
@@ -1267,10 +1297,36 @@ function EnvelopeDetail({
                   <small>{r.email}</small>
                 </span>
                 <span className="method-label">{methodLabels[r.method]}</span>
-                {!locked && <RecipientTools orgId={orgId} envelopeId={e.id} recipient={r} recipients={recipients} action={action} reload={load} busy={busy}/>}
+                {!locked && (
+                  <RecipientTools
+                    orgId={orgId}
+                    envelopeId={e.id}
+                    recipient={r}
+                    recipients={recipients}
+                    action={action}
+                    reload={load}
+                    busy={busy}
+                  />
+                )}
               </div>
             ))}
-            {!locked && <ContactPicker orgId={orgId} action={action} onPick={async c=>{await rpc("al_add_recipient",{p_org:orgId,p_envelope:e.id,p_name:c.name,p_email:c.email,p_method:"email_approval",p_position:recipients.length+1});await load();}}/>}
+            {!locked && (
+              <ContactPicker
+                orgId={orgId}
+                action={action}
+                onPick={async (c, method) => {
+                  await rpc("al_add_recipient", {
+                    p_org: orgId,
+                    p_envelope: e.id,
+                    p_name: c.name,
+                    p_email: c.email,
+                    p_method: method,
+                    p_position: recipients.length + 1,
+                  });
+                  await load();
+                }}
+              />
+            )}
             {!locked && (
               <form
                 className="recipient-form"
@@ -1564,7 +1620,44 @@ function Templates({
           title={editing ? "Redigera fältmall" : "Ny fältmall"}
           close={() => setOpen(false)}
         >
-          {editing && <div className="operation-tools"><button className="secondary" disabled={busy} onClick={()=>action(async()=>{await rpc("al_save_template",{p_org:orgId,p_name:(editing.name+" – kopia").slice(0,160),p_fields:editing.fields});await reload();setOpen(false);})}>Kopiera fältmall</button><button className="secondary" disabled={busy} onClick={()=>action(async()=>{await rpc("al_delete_template",{p_org:orgId,p_id:editing.id,p_version:editing.version});await reload();setOpen(false);})}>Ta bort fältmall</button></div>}
+          {editing && (
+            <div className="operation-tools">
+              <button
+                className="secondary"
+                disabled={busy}
+                onClick={() =>
+                  action(async () => {
+                    await rpc("al_save_template", {
+                      p_org: orgId,
+                      p_name: (editing.name + " – kopia").slice(0, 160),
+                      p_fields: editing.fields,
+                    });
+                    await reload();
+                    setOpen(false);
+                  })
+                }
+              >
+                Kopiera fältmall
+              </button>
+              <button
+                className="secondary"
+                disabled={busy}
+                onClick={() =>
+                  action(async () => {
+                    await rpc("al_delete_template", {
+                      p_org: orgId,
+                      p_id: editing.id,
+                      p_version: editing.version,
+                    });
+                    await reload();
+                    setOpen(false);
+                  })
+                }
+              >
+                Ta bort fältmall
+              </button>
+            </div>
+          )}
           <form
             onSubmit={(ev) => {
               ev.preventDefault();

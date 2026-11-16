@@ -23,8 +23,15 @@ function requireId(v: unknown): string {
   return v;
 }
 const safeCodes = new Set([
-  "INVALID_ID", "INVALID_BODY", "INVALID_FIELDS",
-  "RECIPIENT_NOT_FOUND", "DOCUMENT_NOT_FOUND", "INVALID_RECIPIENT_ORDER", "INVALID_PERIOD", "INVALID_PAGE", "MEMBERSHIP_REVOKED",
+  "INVALID_ID",
+  "INVALID_BODY",
+  "INVALID_FIELDS",
+  "RECIPIENT_NOT_FOUND",
+  "DOCUMENT_NOT_FOUND",
+  "INVALID_RECIPIENT_ORDER",
+  "INVALID_PERIOD",
+  "INVALID_PAGE",
+  "MEMBERSHIP_REVOKED",
   "ACCESS_DENIED",
   "ADMIN_REQUIRED",
   "AUTH_REQUIRED",
@@ -115,7 +122,13 @@ Deno.serve(async (req: Request) => {
           new URL(req.url).searchParams.get("organizationId"),
       );
     if (path === "/v1/methods" && req.method === "GET") {
-      if(isApi){const {error}=await service.rpc("al_api_dispatch",{p_hash:await sha256Hex(token),p_action:"list_envelopes"});if(error)throw error;}
+      if (isApi) {
+        const { error } = await service.rpc("al_api_dispatch", {
+          p_hash: await sha256Hex(token),
+          p_action: "list_envelopes",
+        });
+        if (error) throw error;
+      }
       const { data, error } = await service.rpc("al_capabilities");
       if (error) throw error;
       return response({ data });
@@ -213,40 +226,163 @@ Deno.serve(async (req: Request) => {
       });
       if (error) throw error;
       return response({ data: { id: data, key: raw, prefix } }, 201);
-    } else if (req.method === 'POST' && /^\/v1\/envelopes\/[a-f0-9-]+\/(edit-recipient|remove-recipient|reorder-recipients|remove-document|duplicate)$/.test(path)) {
-      const parts=path.split('/'),id=requireId(parts[3]);
-      const route=parts[4];
-      const commands:Record<string,string>={'edit-recipient':'edit_recipient','remove-recipient':'remove_recipient','reorder-recipients':'reorder_recipients','remove-document':'remove_document','duplicate':'duplicate_draft'};
-      action=commands[route];rpc='al_'+action;payload={...body,envelopeId:id};delete payload.organizationId;
-      args={p_org:isApi?null:org(),p_envelope:id};
-      if(route==='edit-recipient'){const r=recipientSchema.omit({position:true}).parse(body.recipient);payload={...r,id:requireId(body.id),envelopeId:id};args={...args,p_id:payload.id,p_name:r.name,p_email:r.email,p_method:r.method};}
-      else if(route==='reorder-recipients'){if(!Array.isArray(body.ids)||body.ids.length>50)throw new Error('INVALID_BODY');payload={envelopeId:id,ids:body.ids.map(requireId)};args.p_ids=payload.ids;}
-      else if(route==='duplicate'){if(typeof body.title!=='string'||body.title.trim().length<2||body.title.length>160)throw new Error('INVALID_BODY');payload={envelopeId:id,title:body.title};args.p_title=body.title;}
-      else {payload={envelopeId:id,id:requireId(body.id)};args.p_id=payload.id;}
-    } else if(path==='/v1/contacts' && req.method==='GET') {
-      action='list_contacts';
-      if(!isApi){const {data,error}=await client.from('al_contacts').select('*').eq('organization_id',org()).eq('archived',false).order('name').limit(200);if(error)throw error;return response({data});}
-    } else if(path==='/v1/contacts' && req.method==='POST') {
-      action='save_contact';rpc='al_save_contact';
-      const r=recipientSchema.omit({position:true,method:true}).parse({name:body.name,email:body.email});
-      if(body.company!==undefined&&(typeof body.company!=='string'||body.company.length>160))throw new Error('INVALID_BODY');
-      if(body.archived!==undefined&&typeof body.archived!=='boolean')throw new Error('INVALID_BODY');
-      payload={...r,company:body.company??'',id:body.id?requireId(body.id):null,version:body.version??null,archived:body.archived??false};
-      args={p_org:isApi?null:org(),p_name:r.name,p_email:r.email,p_company:payload.company,p_id:payload.id,p_version:payload.version,p_archived:payload.archived};
-    } else if(path==='/v1/activity' && req.method==='GET') {
-      const q=new URL(req.url).searchParams;action='activity';rpc='al_activity';
-      const limit=Number(q.get('limit')??50);if(!Number.isInteger(limit)||limit<1||limit>200)throw new Error('INVALID_PAGE');
-      payload={limit,beforeTime:q.get('beforeTime'),beforeId:q.get('beforeId')};
-      args={p_org:isApi?null:org(),p_limit:limit,p_before_time:payload.beforeTime,p_before_id:payload.beforeId};
-    } else if(path==='/v1/usage' && req.method==='GET') {
-      const q=new URL(req.url).searchParams;action='usage_summary';rpc='al_usage_summary';payload={from:q.get('from'),to:q.get('to')};args={p_org:isApi?null:org(),p_from:payload.from,p_to:payload.to};
-    } else if(path==='/v1/templates' && req.method==='GET') {
-      action='list_templates';
-      if(!isApi){const {data,error}=await client.from('al_templates').select('*').eq('organization_id',org()).order('updated_at',{ascending:false}).limit(200);if(error)throw error;return response({data});}
-    } else if(path==='/v1/templates' && req.method==='POST') {
-      action='save_template';rpc='al_save_template';
-      if(typeof body.name!=='string'||body.name.trim().length<2||body.name.length>160||!Array.isArray(body.fields)||body.fields.length>200)throw new Error('INVALID_FIELDS');
-      payload={name:body.name,fields:body.fields,id:body.id?requireId(body.id):null,version:body.version??null};args={p_org:isApi?null:org(),p_name:body.name,p_fields:body.fields,p_id:payload.id,p_version:payload.version};
+    } else if (
+      req.method === "POST" &&
+      /^\/v1\/envelopes\/[a-f0-9-]+\/(edit-recipient|remove-recipient|reorder-recipients|remove-document|duplicate)$/.test(
+        path,
+      )
+    ) {
+      const parts = path.split("/"),
+        id = requireId(parts[3]);
+      const route = parts[4];
+      const commands: Record<string, string> = {
+        "edit-recipient": "edit_recipient",
+        "remove-recipient": "remove_recipient",
+        "reorder-recipients": "reorder_recipients",
+        "remove-document": "remove_document",
+        duplicate: "duplicate_draft",
+      };
+      action = commands[route];
+      rpc = "al_" + action;
+      payload = { ...body, envelopeId: id };
+      delete payload.organizationId;
+      args = { p_org: isApi ? null : org(), p_envelope: id };
+      if (route === "edit-recipient") {
+        const r = recipientSchema
+          .omit({ position: true })
+          .parse(body.recipient);
+        payload = { ...r, id: requireId(body.id), envelopeId: id };
+        args = {
+          ...args,
+          p_id: payload.id,
+          p_name: r.name,
+          p_email: r.email,
+          p_method: r.method,
+        };
+      } else if (route === "reorder-recipients") {
+        if (!Array.isArray(body.ids) || body.ids.length > 50)
+          throw new Error("INVALID_BODY");
+        payload = { envelopeId: id, ids: body.ids.map(requireId) };
+        args.p_ids = payload.ids;
+      } else if (route === "duplicate") {
+        if (
+          typeof body.title !== "string" ||
+          body.title.trim().length < 2 ||
+          body.title.length > 160
+        )
+          throw new Error("INVALID_BODY");
+        payload = { envelopeId: id, title: body.title };
+        args.p_title = body.title;
+      } else {
+        payload = { envelopeId: id, id: requireId(body.id) };
+        args.p_id = payload.id;
+      }
+    } else if (path === "/v1/contacts" && req.method === "GET") {
+      action = "list_contacts";
+      if (!isApi) {
+        const { data, error } = await client
+          .from("al_contacts")
+          .select("*")
+          .eq("organization_id", org())
+          .eq("archived", false)
+          .order("name")
+          .limit(200);
+        if (error) throw error;
+        return response({ data });
+      }
+    } else if (path === "/v1/contacts" && req.method === "POST") {
+      action = "save_contact";
+      rpc = "al_save_contact";
+      const r = recipientSchema
+        .omit({ position: true, method: true })
+        .parse({ name: body.name, email: body.email });
+      if (
+        body.company !== undefined &&
+        (typeof body.company !== "string" || body.company.length > 160)
+      )
+        throw new Error("INVALID_BODY");
+      if (body.archived !== undefined && typeof body.archived !== "boolean")
+        throw new Error("INVALID_BODY");
+      payload = {
+        ...r,
+        company: body.company ?? "",
+        id: body.id ? requireId(body.id) : null,
+        version: body.version ?? null,
+        archived: body.archived ?? false,
+      };
+      args = {
+        p_org: isApi ? null : org(),
+        p_name: r.name,
+        p_email: r.email,
+        p_company: payload.company,
+        p_id: payload.id,
+        p_version: payload.version,
+        p_archived: payload.archived,
+      };
+    } else if (path === "/v1/activity" && req.method === "GET") {
+      const q = new URL(req.url).searchParams;
+      action = "activity";
+      rpc = "al_activity";
+      const limit = Number(q.get("limit") ?? 50);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200)
+        throw new Error("INVALID_PAGE");
+      payload = {
+        limit,
+        beforeTime: q.get("beforeTime"),
+        beforeId: q.get("beforeId"),
+      };
+      args = {
+        p_org: isApi ? null : org(),
+        p_limit: limit,
+        p_before_time: payload.beforeTime,
+        p_before_id: payload.beforeId,
+      };
+    } else if (path === "/v1/usage" && req.method === "GET") {
+      const q = new URL(req.url).searchParams;
+      action = "usage_summary";
+      rpc = "al_usage_summary";
+      payload = { from: q.get("from"), to: q.get("to") };
+      args = {
+        p_org: isApi ? null : org(),
+        p_from: payload.from,
+        p_to: payload.to,
+      };
+    } else if (path === "/v1/templates" && req.method === "GET") {
+      action = "list_templates";
+      if (!isApi) {
+        const { data, error } = await client
+          .from("al_templates")
+          .select("*")
+          .eq("organization_id", org())
+          .order("updated_at", { ascending: false })
+          .limit(200);
+        if (error) throw error;
+        return response({ data });
+      }
+    } else if (path === "/v1/templates" && req.method === "POST") {
+      action = "save_template";
+      rpc = "al_save_template";
+      if (
+        typeof body.name !== "string" ||
+        body.name.trim().length < 2 ||
+        body.name.length > 160 ||
+        !Array.isArray(body.fields) ||
+        body.fields.length > 200
+      )
+        throw new Error("INVALID_FIELDS");
+      payload = {
+        name: body.name,
+        fields: body.fields,
+        id: body.id ? requireId(body.id) : null,
+        version: body.version ?? null,
+      };
+      args = {
+        p_org: isApi ? null : org(),
+        p_name: body.name,
+        p_fields: body.fields,
+        p_id: payload.id,
+        p_version: payload.version,
+      };
     } else return response({ error: { code: "NOT_FOUND", requestId } }, 404);
     const result = isApi
       ? await service.rpc("al_api_dispatch", {
