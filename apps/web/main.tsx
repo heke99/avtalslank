@@ -265,6 +265,7 @@ function App() {
           {nav.map(([id, label, Icon]) => (
             <button
               key={id}
+              aria-label={label}
               className={view === id ? "active" : ""}
               onClick={() => {
                 if(draftDirty&&!confirm('Du har osparade ändringar. Vill du lämna utkastet?'))return;

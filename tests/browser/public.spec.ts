@@ -21,7 +21,7 @@ test('public hero, plans and legal navigation with no optional tracking or stora
     await page.screenshot({ path: '.verification/public-home-desktop.png', fullPage: true });
     await page.getByRole('link', { name: 'Jämför abonnemangen' }).click();
     await expect(page.getByRole('heading', { name: 'Välj upplägg för dina avtal' })).toBeVisible();
-    await expect(page.getByText('Pris och omfattning enligt separat offert.')).toBeVisible();
+    await expect(page.getByText('Pris och omfattning enligt separat offert.',{exact:true})).toBeVisible();
     await page.getByRole('link', { name: 'Välj Team', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Skapa konto', exact: true })).toBeVisible();
     await expect(page.getByLabel('Önskat upplägg', { exact: true })).toHaveValue('team');
@@ -78,7 +78,7 @@ test('API examples switch language and copy the selected server example',async({
 });
 test('customer pages omit build-stage wording and preserve archived policy versions',async({page})=>{
  for(const path of ['/','/produkt','/abonnemang','/api','/sakerhet','/integritet','/villkor','/dataskydd']){await page.goto(path);await expect(page.locator('body')).not.toContainText(/skarpa utskick|skarp signering|inför lansering/i);}
- await page.goto('/villkor');await expect(page.getByText('Version 2026-11-16.2',{exact:false})).toBeVisible();await expect(page.getByRole('link',{name:'Tidigare version'})).toHaveAttribute('href','/legal/2026-11-16/villkor.html');
+ await page.goto('/villkor');await expect(page.locator('.public-version')).toContainText('Version 2026-11-16.2');await expect(page.getByRole('link',{name:'Tidigare version'})).toHaveAttribute('href','/legal/2026-11-16/villkor.html');
 });
 test('account startup presents recovery when session refresh cannot finish',async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('sb-ykddnagtuacflilbchwx-auth-token',JSON.stringify({access_token:'expired-synthetic-token',refresh_token:'synthetic-refresh',token_type:'bearer',expires_at:1,user:{id:'11111111-1111-4111-8111-111111111111',email:'test@example.invalid',aud:'authenticated',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-01-01T00:00:00Z'}})));
