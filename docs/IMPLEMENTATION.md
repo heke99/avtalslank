@@ -58,3 +58,7 @@ Not production-ready for signing: public signer sessions, delivery/email, verifi
 [CI run 43824350412](https://github.com/heke99/avtalslank/actions/runs/43824350412) passed on 6cf9c087a6a9e197946fea698592a0e268a225a7: 32 code/database tests and all six Chromium UI scenarios. The sixth exercises editing, moving, removing and copying recipients and verifies the new draft editor does not keep the old title. Explicit accessible names distinguish manual, saved-contact and edited-recipient method selectors.
 
 The deployed generated hostname was added to the exact Edge CORS allowlist; no wildcard origin access. API v5 includes this deployment-origin fix. Production browser-auth registration, recovery email redirects and SMTP delivery are still unverified; configure the Avtalslänk project's Site URL to https://avtalslank.vercel.app and allow that URL plus /reset-password while testing, then app.avtalslank.se at domain cutover. Do not reuse donor Auth or SMTP credentials.
+
+## UI revision (2026-11-16)
+
+Replaced promotional login and dashboard composition with a compact operational interface: system fonts, navy actions, neutral surfaces, grouped status counters, direct Swedish headings and clearer form contrast. Removed paper illustrations, decorative hero and aspirational copy. Updated browser expectations for the new headings; no database or signing logic changed.

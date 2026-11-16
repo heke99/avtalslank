@@ -271,8 +271,8 @@ function App() {
         <div className="sidebar-bottom">
           <div className="help-box">
             <ShieldCheck size={20} />
-            <strong>På plats hela vägen.</strong>
-            <p>Från första utkast till färdigt avtal.</p>
+            <strong>Support</strong>
+            <p>Frågor om Avtalslänk?</p>
             <a href="mailto:info@trafexa.com">
               Kontakta oss <ArrowUpRight size={14} />
             </a>
@@ -325,9 +325,7 @@ function App() {
             <div className="welcome-card">
               <div className="eyebrow">VÄLKOMMEN TILL AVTALSLÄNK</div>
               <h1>
-                En egen plats för
-                <br />
-                företagets avtal.
+                Skapa företagskonto
               </h1>
               <p>
                 Skapa ditt företag för att börja med dokument, mottagare och
@@ -361,23 +359,23 @@ function App() {
                 <div>
                   <div className="eyebrow">
                     {view === "overview"
-                      ? "LITE MINDRE ADMINISTRATION. LITE MER FLYT."
+                      ? "AVTALSLÄNK"
                       : "DIN ARBETSYTA"}
                   </div>
                   <h1>
                     {view === "overview"
-                      ? "Dina avtal. På ett ställe."
+                      ? "Översikt"
                       : view === "agreements"
                         ? "Alla avtal"
                         : view === "templates"
-                          ? "En bra början, varje gång."
+                          ? "Mallar"
                           : view === "developers"
-                            ? "Bygg in Avtalslänk."
-                            : "Företagets inställningar"}
+                            ? "API och integration"
+                            : view === "workspace" ? "Företag & team" : "Inställningar"}
                   </h1>
                   <p>
                     {view === "overview"
-                      ? "Skapa, samla och följ dina avtal – från första utkastet."
+                      ? "Status och senast uppdaterade avtal."
                       : view === "agreements"
                         ? "Håll koll på dokument, mottagare och nästa steg."
                         : view === "templates"
@@ -405,14 +403,14 @@ function App() {
                         label: "Totalt antal avtal",
                         value: envelopes.length,
                         icon: FileText,
-                        desc: "Samlat i din arbetsyta",
+                        desc: "I företagskontot",
                       },
                       {
                         label: "Utkast",
                         value: envelopes.filter((e) => e.status === "draft")
                           .length,
                         icon: PenLine,
-                        desc: "Redo för ditt nästa steg",
+                        desc: "Under arbete",
                       },
                       {
                         label: "Väntar på signering",
@@ -439,43 +437,6 @@ function App() {
                         <small>{s.desc}</small>
                       </div>
                     ))}
-                  </div>
-                  <div className="start-banner">
-                    <div>
-                      <span className="eyebrow">
-                        FRÅN DOKUMENT TILL NÄSTA STEG
-                      </span>
-                      <h2>Avtal behöver inte vara krångliga.</h2>
-                      <p>
-                        Ladda upp en PDF, lägg till mottagare och välj hur de
-                        ska signera.
-                      </p>
-                      <button
-                        className="text-button"
-                        onClick={() => setModal("create")}
-                      >
-                        Skapa ett nytt avtal <ArrowRight size={17} />
-                      </button>
-                    </div>
-                    <div className="document-art" aria-hidden="true">
-                      <div className="art-paper">
-                        <span className="art-logo">
-                          <Link2 size={18} />
-                          avtalslänk
-                        </span>
-                        <div className="art-line short" />
-                        <div className="art-line" />
-                        <div className="art-line" />
-                        <div className="art-sign">Ditt nästa steg</div>
-                        <span className="art-check">
-                          <Check size={18} />
-                        </span>
-                      </div>
-                      <span className="art-pill">
-                        <ShieldCheck size={14} />
-                        Tydligt från början.
-                      </span>
-                    </div>
                   </div>
                 </>
               )}
@@ -512,8 +473,8 @@ function App() {
                   {envelopes.length === 0 ? (
                     <Empty
                       icon={<FileText size={27} />}
-                      title="Här börjar nästa överenskommelse."
-                      description="Ditt första avtal får snart sin plats här. Börja med en PDF eller ett enkelt utkast."
+                      title="Inga avtal ännu"
+                      description="Skapa ett utkast och lägg till dokument och mottagare."
                       action={
                         <button
                           className="secondary"
@@ -583,7 +544,7 @@ function App() {
               {view === "overview" && (
                 <div className="footer-note">
                   <LockKeyhole size={14} />
-                  Dina dokument tillhör ditt företag.
+                  Företagets dokument
                   <span>Avtalslänk · Trafexa Nordic AB</span>
                 </div>
               )}
@@ -904,19 +865,19 @@ function Auth({
       <div className="auth-main">
         <Brand />
         <div className="auth-form">
-          <span className="eyebrow">DIN NÄSTA ÖVERENSKOMMELSE BÖRJAR HÄR</span>
+          <span className="eyebrow">AVTALSLÄNK</span>
           <h1>
             {mode === "login"
-              ? "Välkommen tillbaka."
+              ? "Logga in"
               : mode === "register"
-                ? "Gör plats för enklare avtal."
-                : "Hitta tillbaka till ditt konto."}
+                ? "Skapa konto"
+                : "Återställ lösenord"}
           </h1>
           <p>
             {mode === "login"
-              ? "Logga in och fortsätt där du slutade."
+              ? "Ange din e-postadress och ditt lösenord."
               : mode === "register"
-                ? "Skapa ditt konto. Samla dina dokument och förbered ditt första avtal."
+                ? "Registrera ett konto för att hantera företagets avtal."
                 : "Vi skickar en länk till din e-postadress."}
           </p>
           {!configured && (
@@ -1056,41 +1017,7 @@ function Auth({
           <a href="mailto:info@trafexa.com">Kontakta oss</a>
         </footer>
       </div>
-      <div className="auth-art">
-        <span className="auth-pill">
-          <ShieldCheck size={16} />
-          En tydligare väg till överens.
-        </span>
-        <div className="auth-quote">
-          <h2>
-            Från första utkast
-            <br />
-            till nästa kapitel.
-          </h2>
-          <p>
-            Dokument, mottagare och nästa steg.
-            <br />
-            Allt samlat i en egen arbetsyta.
-          </p>
-        </div>
-        <div className="large-paper" aria-hidden="true">
-          <span className="paper-label">EN NY ÖVERENSKOMMELSE</span>
-          <h3>Vi är överens.</h3>
-          <div className="paper-lines">
-            <i />
-            <i />
-            <i />
-            <i />
-          </div>
-          <div className="paper-sign">Ditt nästa kapitel</div>
-          <span className="paper-stamp">
-            <Check size={30} />
-          </span>
-        </div>
-        <div className="auth-bottom">
-          Skapa. Samla. Kom överens.<span>avtalslänk.</span>
-        </div>
-      </div>
+
     </div>
   );
 }
@@ -1153,7 +1080,7 @@ function EnvelopeDetail({
         <div>
           <span className="eyebrow">AVTAL · VERSION {e.generation}</span>
           <h1>{e.title}</h1>
-          <p>Förbered varje steg i lugn och ro.</p>
+          <p>Dokument, mottagare och utskicksinställningar.</p>
         </div>
         <Status status={e.status} />
       </div>

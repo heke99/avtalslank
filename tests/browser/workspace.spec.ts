@@ -162,7 +162,7 @@ async function workspace(page: Page) {
   });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Dina avtal. På ett ställe." }),
+    page.getByRole("heading", { name: "Översikt" }),
   ).toBeVisible();
 }
 test("desktop workspace: draft, Freja selection, readiness block, fields, billing remains unconfigured", async ({
@@ -239,7 +239,7 @@ test("login page and invalid signer link never fabricate signed status", async (
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Välkommen tillbaka." }),
+    page.getByRole("heading", { name: "Logga in" }),
   ).toBeVisible();
   await page.screenshot({ path: ".verification/login.png", fullPage: true });
   await page.goto("/s/invalid-token");

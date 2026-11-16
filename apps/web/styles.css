@@ -1,15 +1,14 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;650;700;750;800&display=swap");
 :root {
-  font-family: "DM Sans", system-ui, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   color: #233d37;
   background: #f6f8f7;
   font-synthesis: none;
   font-size: 14px;
   font-weight: 400;
-  --green: #245c4c;
-  --dark: #143c31;
-  --muted: #7b8983;
-  --line: #e7ece8;
+  --green: #243b53;
+  --dark: #152b42;
+  --muted: #626d78;
+  --line: #dce1e6;
   --serif: Georgia, serif;
 }
 * {
@@ -62,7 +61,7 @@ p {
 h1,
 h2,
 h3 {
-  font-family: "Manrope", system-ui, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   letter-spacing: -0.045em;
 }
 h1 {
@@ -91,7 +90,7 @@ strong {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: "Manrope", sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   font-weight: 800;
   font-size: 24px;
   letter-spacing: -1.25px;
@@ -402,7 +401,7 @@ main {
 }
 .stat > strong {
   display: block;
-  font-family: "Manrope", sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   font-size: 31px;
   font-weight: 600;
   letter-spacing: -1px;
@@ -1662,3 +1661,14 @@ dd {
 
 /* Workspace operations share the same spacing and responsive controls. */
 .operations{max-width:1080px}.operation-tabs,.operation-tools{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.operation-tabs{border-bottom:1px solid #dce5df;padding-bottom:18px;margin-bottom:24px}.operation-form{display:grid;gap:16px;background:#fff;border:1px solid #dce5df;border-radius:14px;padding:24px;margin:20px 0;max-width:760px}.operation-form label{display:grid;gap:7px}.operation-tools .operation-form{flex-basis:100%;width:100%}.operation-tools .secondary{padding:8px 12px;font-size:12px}.pdf-preview{flex-basis:100%;width:100%;display:grid;gap:10px}.pdf-preview iframe{width:100%;height:70vh;border:1px solid #dce5df;border-radius:8px}.operations .list-row{flex-wrap:wrap;overflow-wrap:anywhere}.operations .list-row label{display:grid;gap:5px;font-size:12px}.operations input[type=checkbox]{width:auto}.operations time{font-size:12px;color:#64756c}@media(max-width:700px){.operation-form{padding:16px}.operation-tabs button{flex:1 1 40%}.operations .two-columns{grid-template-columns:1fr}.operations .list-row{gap:12px}.operation-tools{width:100%}}
+
+/* Operational interface: restrained typography, flat surfaces, no decorative hero. */
+:root{color:#202a35;background:#f5f6f8;font-size:14px}
+h1,h2,h3,.brand,.stat>strong{font-family:Arial,Helvetica,sans-serif;letter-spacing:normal}
+h1{font-size:28px;font-weight:600}.brand{font-size:23px;color:#243b53;letter-spacing:-.5px}.brand>span:first-child,.brand>span:first-child svg{transform:none}.brand>span:first-child{border-radius:4px;background:#edf0f3}.brand-dot{display:none}
+.sidebar{border-right:1px solid #dce1e6}.sidebar nav{gap:3px}.sidebar nav button{border-radius:3px;color:#4c5968;padding:11px 13px;font-size:13px}.sidebar nav button.active{background:#e9eef4;color:#203b56;border-left:3px solid #243b53;padding-left:10px}.help-box{background:transparent;border-top:1px solid #dce1e6;border-radius:0;padding:16px 0}.user-avatar,.org-avatar{border-radius:4px;background:#edf0f3;color:#3e5062}
+.page-heading{margin-bottom:24px}.page-heading h1{font-size:28px}.page-heading .eyebrow{display:none}.page-heading p{color:#616d79;font-size:13px;margin-top:8px}.stats{gap:0;border:1px solid #dce1e6;background:#fff;border-radius:4px;margin-bottom:28px}.stat{border:0;border-right:1px solid #dce1e6;border-radius:0;padding:18px 22px;background:transparent}.stat:last-child{border-right:0}.stat>div{font-size:12px;color:#536170}.stat svg,.stat small{display:none}.stat>strong{font-size:28px;letter-spacing:normal;margin-top:14px}
+.primary,.secondary{font-size:13px;min-height:38px;padding:10px 15px;border-radius:4px;font-weight:600}.primary{background:#243b53;color:white}.primary:hover{background:#152b42}.secondary{border-color:#cbd2d9;color:#344454}.panel,.welcome-card,.operation-form,.empty-card{border-radius:4px;box-shadow:none}.panel-header{padding:18px 22px}.panel-header p{color:#687480}.panel-header h2{font-size:15px}.empty-card{padding:36px 24px}.empty-card h3{font-size:17px}.empty-card p{font-size:13px;color:#626d78}.empty-icon{border-radius:4px;background:#eef1f4;color:#536679}
+input,select,textarea{border-radius:4px!important;color:#202a35;border-color:#cbd2d9!important}input:focus,select:focus,textarea:focus{outline:2px solid #829ab1;outline-offset:1px;box-shadow:none!important}.file-icon{border-radius:4px;background:#eef1f4;color:#52677d}table th{font-size:11px;letter-spacing:.4px}table td{font-size:13px}.table-wrap td{padding-top:15px;padding-bottom:15px}.operation-tabs{gap:0;padding-bottom:0}.operation-tabs button{border-radius:0;border:0;border-bottom:2px solid transparent;background:transparent;color:#536170;min-height:42px}.operation-tabs button.primary{border-bottom-color:#243b53;color:#243b53}.operation-form{padding:20px}.operation-tools .secondary{font-size:12px}.eyebrow{letter-spacing:.8px;color:#657486}
+.auth-layout{display:block;background:#f5f6f8;min-height:100vh}.auth-main{max-width:460px;min-height:100vh;margin:0 auto;padding:40px 24px 24px}.auth-main>.brand{justify-content:center;margin:0 0 48px}.auth-form{background:#fff;border:1px solid #dce1e6;border-radius:4px;padding:28px;max-width:none;margin:0;width:100%}.auth-form>.eyebrow{display:none}.auth-form h1{font-size:24px;margin:0 0 10px;letter-spacing:normal}.auth-form>p{font-size:13px;color:#626d78;line-height:1.5;margin-bottom:24px}.auth-form form{margin-top:0}.auth-form label{font-size:13px;color:#344454}.auth-links{font-size:12px;gap:12px}.auth-main footer{position:static;margin-top:auto;padding-top:32px;font-size:11px;color:#687480;display:flex;gap:12px;justify-content:space-between}.auth-main footer a{color:#465c73}.auth-main .input-icon{border-radius:4px}
+@media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}.stat{padding:16px;border-bottom:1px solid #dce1e6}.stat:nth-child(2){border-right:0}.stat:nth-child(n+3){border-bottom:0}.page-heading h1{font-size:24px}.auth-main{padding:28px 20px 20px}.auth-main>.brand{margin-bottom:32px}.auth-form{padding:24px}.auth-form h1{font-size:24px}.auth-links{flex-wrap:wrap}.auth-main footer{font-size:10px}.operation-tabs button{flex:1 1 40%;font-size:12px}}
