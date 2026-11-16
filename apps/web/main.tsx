@@ -1392,6 +1392,7 @@ function EnvelopeDetail({
                     p_sequential: sequential,
                     p_expires_days: e.expires_days,
                   });
+                  setTitle(v.title);setMessage(v.message);setSequential(v.sequential);onDirty(false);
                   onSaved(v);
                   setStep(3);
                 });
