@@ -1980,14 +1980,70 @@
           "200": {
             "description": "data array of receipts"
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "organizationId",
+            "required": false,
+            "description": "Required for user JWT; ignored for scoped API key, whose organization is authoritative.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       },
       "post": {
         "summary": "Import up to 200 contacts atomically",
         "description": "User JWT plus organizationId or API key with envelopes:write. JSON body: requestId UUID and rows:[{name,email,company?}]. Name2..120, email<=254, company<=160. Total HTTP payload<=65536 bytes. Server trims and lowercases email; duplicate normalized emails in batch reject the entire import. Existing emails (including archived contacts) are skipped, never updated or restored. All rows validate before writes. Same organization/requestId and normalized ordered rows returns original counts; changed rows cause IDEMPOTENCY_CONFLICT. Authorization/scope/expiry is checked before replay. Manual retry after unknown response must reuse the same requestId and ordered rows. No automatic POST retry. No emails or charges. Result: requestId,total,created,skipped,archivedSkipped.",
         "responses": {
           "200": {
-            "description": "data import result"
+            "description": "data import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "total",
+                        "created",
+                        "skipped",
+                        "archivedSkipped"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "created": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "archivedSkipped": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
             "description": "Validation failure; no partial import"
@@ -2000,6 +2056,72 @@
           },
           "409": {
             "description": "Idempotency conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "requestId",
+                  "rows"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Required for user JWT; API keys derive organization from their verified key."
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "rows": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 2,
+                          "maxLength": 120
+                        },
+                        "email": {
+                          "type": "string",
+                          "format": "email",
+                          "maxLength": 254
+                        },
+                        "company": {
+                          "type": "string",
+                          "maxLength": 160,
+                          "default": ""
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "requestId": "06e5264f-c708-4853-8676-ddacb682c89c",
+                "rows": [
+                  {
+                    "name": "Anna Andersson",
+                    "email": "anna@example.invalid",
+                    "company": "Exempel AB"
+                  }
+                ]
+              }
+            }
           }
         }
       }
