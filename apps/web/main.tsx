@@ -324,9 +324,7 @@ function App() {
           {!org ? (
             <div className="welcome-card">
               <div className="eyebrow">VÄLKOMMEN TILL AVTALSLÄNK</div>
-              <h1>
-                Skapa företagskonto
-              </h1>
+              <h1>Skapa företagskonto</h1>
               <p>
                 Skapa ditt företag för att börja med dokument, mottagare och
                 mallar.
@@ -358,9 +356,7 @@ function App() {
               <div className="page-heading">
                 <div>
                   <div className="eyebrow">
-                    {view === "overview"
-                      ? "AVTALSLÄNK"
-                      : "DIN ARBETSYTA"}
+                    {view === "overview" ? "AVTALSLÄNK" : "DIN ARBETSYTA"}
                   </div>
                   <h1>
                     {view === "overview"
@@ -371,7 +367,9 @@ function App() {
                           ? "Mallar"
                           : view === "developers"
                             ? "API och integration"
-                            : view === "workspace" ? "Företag & team" : "Inställningar"}
+                            : view === "workspace"
+                              ? "Företag & team"
+                              : "Inställningar"}
                   </h1>
                   <p>
                     {view === "overview"
@@ -1017,7 +1015,6 @@ function Auth({
           <a href="mailto:info@trafexa.com">Kontakta oss</a>
         </footer>
       </div>
-
     </div>
   );
 }
@@ -1136,6 +1133,20 @@ function EnvelopeDetail({
                       const bytes = new Uint8Array(await file.arrayBuffer());
                       if (!isPdf(bytes)) throw new Error("INVALID_PDF");
                       const id = crypto.randomUUID();
+                      const hash = await sha256Hex(bytes);
+                      const { inspectUpload } = await import(
+                        "../../packages/signing/src/index.ts"
+                      );
+                      await inspectUpload(
+                        {
+                          documentId: id,
+                          envelopeId: e.id,
+                          name,
+                          sha256: hash,
+                          byteSize: file.size,
+                        },
+                        bytes,
+                      );
                       const path = `${orgId}/${e.id}/${id}.pdf`;
                       const { error } = await supabase.storage
                         .from("al-documents")
@@ -1149,7 +1160,7 @@ function EnvelopeDetail({
                         p_envelope: e.id,
                         p_id: id,
                         p_name: name,
-                        p_sha256: await sha256Hex(bytes),
+                        p_sha256: hash,
                         p_byte_size: file.size,
                       });
                       await load();
@@ -1186,6 +1197,7 @@ function EnvelopeDetail({
                 </span>
                 <button
                   className="secondary"
+                  disabled={d.status !== "ready"}
                   onClick={() =>
                     action(async () => {
                       const { data, error } = await supabase.storage

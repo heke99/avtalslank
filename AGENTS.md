@@ -8,3 +8,6 @@ BankID/Freja remain unavailable until real configuration and independent evidenc
 Billing is undecided: support subscription, per-document and hybrid structures without a chosen price or payment provider. Never charge from retries.
 Record donor path, pinned commit, digest and adaptations in docs/reuse-manifest.json. No credentials or user data from donors.
 Run npm run verify; run real two-tenant SQL/RLS and browser tests for changed surfaces. Report unexecuted provider/container checks honestly.
+
+## Required engineering baseline
+Use docs/engineering/AGENTS.md and docs/engineering/docs/ENGINEERING_STANDARD.md for all future work. Preserve the Avtalslänk-specific rules above. Current implementation and evidence live in docs/IMPLEMENTATION.md; active signing work is tracked in docs/work/signing-v1.md. Never describe a pure module test as a verified production signing flow.
