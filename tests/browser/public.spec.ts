@@ -5,6 +5,7 @@ test('public hero, plans and legal navigation with no optional tracking or stora
     page.on('request', r => { const u = new URL(r.url()); if (!['127.0.0.1', 'localhost'].includes(u.hostname))
         external.push(u.hostname); });
     await page.goto('/');
+    await expect(page.locator('#public-main')).toHaveCSS('margin-left','0px');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mindre administration.Mer avtalat.');
     await expect(page.getByText('Konton och utkast är öppna.', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Skapa ditt företagskonto' })).toHaveAttribute('href', '/signup');
