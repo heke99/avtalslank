@@ -33,3 +33,7 @@ Official references consulted 2026-11-16:
 ## Verification status
 
 In progress. No database or Edge API change in this iteration, so no new hosted migration is required. Existing actual PostgreSQL/two-tenant suite is rerun with web/Edge/worker typechecks, provenance and build. New browser scenarios cover public pages, plan registration, no purchase, legal version handling, cookies, responsive navigation and public network/storage. Auth requests are mocked in browser verification; real signup email and provider signing are not proven by those checks. Capture public-page screenshots in CI and inspect the deployed public UI separately.
+
+Local: npm run verify passes 65 code/database tests, web/Edge/worker typechecks, 18 pinned provenance checks, production build and 10-page prerender/OpenAPI/sitemap verification. Public styles are scoped against workspace sidebar and table defaults. Live browser inspection confirmed the hero, planned Start/Team/API overview, cookie settings and /cookies navigation. No real account, terms acceptance, payment or email was submitted.
+
+CI run 43900677474: code/database/build checks passed, then browser installation failed because ubuntu-latest resolved to Ubuntu 26.04, unsupported by locked Playwright 1.58.2. Both jobs are now pinned to ubuntu-24.04. Cookie dialog explicitly focuses its close button after showModal, then restores the opener on closure. Rerun pending.

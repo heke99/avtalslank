@@ -4,7 +4,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
       VITE_SUPABASE_URL: https://ykddnagtuacflilbchwx.supabase.co
@@ -31,7 +31,7 @@ jobs:
             .verification/
             test-results/
   worker-container:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
