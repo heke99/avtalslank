@@ -1531,8 +1531,47 @@
                       "reason": {
                         "type": "string",
                         "maxLength": 500
+                      },
+                      "identity": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "personalNumber"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 2,
+                            "maxLength": 120
+                          },
+                          "personalNumber": {
+                            "type": "string",
+                            "description": "Self-declared Swedish personal number; 12 digits and optional separator. Calendar/Luhn checks are not identity verification.",
+                            "pattern": "^[0-9]{8}-?[0-9]{4}$"
+                          }
+                        }
                       }
-                    }
+                    },
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "intent": {
+                              "const": "approve"
+                            }
+                          },
+                          "required": [
+                            "intent"
+                          ]
+                        },
+                        "then": {
+                          "required": [
+                            "identity"
+                          ]
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
