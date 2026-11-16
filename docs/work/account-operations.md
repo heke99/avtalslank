@@ -18,3 +18,7 @@ Auth release prerequisites: /join/ must be included in the project's allowed Aut
 
 Local verification: npm run verify passes with 62 code/database tests, including actual PostgreSQL app-role checks and HTTP-adapter-to-database invitation hashing. TypeScript web/worker/Edge and production build pass; all 18 source-port digests pass. Browser checks execute in CI because local Chromium is restricted in this environment.
 
+
+Hosted evidence 2026-11-16: team_and_operations applied; API v7 ACTIVE. Expanded two-tenant SQL smoke passed and rolled back: wrong email denied, confirmed invite accepted, leave invalidates access, exact accept retry cannot restore membership, last owner denied, readiness projection scoped. Security advisor returned zero findings. Live HTTP: /health 200, unauthenticated /v1/status and /v1/team/invitations both 401. Vercel deployment dpl_B19dnorB44DFdgsWYByDqs3DfbyJ READY at 01d7c337f5abb2e091e386237eec03b355576b92.
+
+CI 43841774864: 62 code/database tests and worker-container checks passed; 13/15 browser cases passed. Two test selectors omitted the visible version in the agreement button's accessible name. Corrected to the explicitly named Open buttons; rerun pending. No production capability was activated.

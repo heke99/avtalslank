@@ -60,4 +60,27 @@ do $$declare o uuid:=current_setting('al.smoke_org_a')::uuid;e uuid:=current_set
  exception when others then if sqlerrm<>'INVALID_SIGNING_LINK' then raise;end if;end;
 end $$;
 reset role;
+-- Team commands run as service only, with a confirmed email binding.
+update auth.users set email_confirmed_at=now() where id in ('f8160001-0000-4000-8000-000000000001','f8160002-0000-4000-8000-000000000002');
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+set local role service_role;
+do $$declare a uuid:='f8160001-0000-4000-8000-000000000001';b uuid:='f8160002-0000-4000-8000-000000000002';o uuid:=current_setting('al.smoke_org_a')::uuid;v jsonb;begin
+ v:=public.al_team_command(a,o,'create',jsonb_build_object('email','avtalslank-smoke-b@example.invalid','role','reader','tokenHash',repeat('9',64)));
+ begin
+ perform public.al_team_command(a,null,'accept',jsonb_build_object('tokenHash',repeat('9',64)));raise exception 'WRONG_EMAIL_ALLOWED';
+ exception when others then if sqlerrm<>'INVALID_INVITATION' then raise;end if;end;
+ v:=public.al_team_command(b,null,'accept',jsonb_build_object('tokenHash',repeat('9',64)));
+ if (v->>'organizationId')::uuid<>o then raise exception 'WRONG_ORGANIZATION';end if;
+ v:=public.al_team_command(b,o,'leave');
+ perform public.al_team_command(b,null,'accept',jsonb_build_object('tokenHash',repeat('9',64)));
+ begin
+ perform public.al_operational_status(b,null,o);raise exception 'RETRY_RESTORED_ACCESS';
+ exception when others then if sqlerrm<>'ACCESS_DENIED' then raise;end if;end;
+ begin
+ perform public.al_team_command(a,o,'leave');raise exception 'LAST_OWNER_LEFT';
+ exception when others then if sqlerrm<>'LAST_OWNER' then raise;end if;end;
+ v:=public.al_operational_status(a,null,o);
+ if not(v ?& array['workerFresh','methods','deliveries']) then raise exception 'STATUS_SHAPE';end if;
+end $$;
+reset role;
 rollback;
