@@ -92,3 +92,9 @@ New bounded API cursor listing and filters, shared timed HTTP client with GET-on
 ## Production UX/API release evidence
 
 Verified 664f2f1fd39d39c01dc05dec1963733f0f364a0c in CI 43916171314: 74 code/database tests and 28 browser scenarios plus container/type/build/static/provenance checks passed. API v8 ACTIVE, production_api_queries applied, hosted two-tenant rollback smoke passed, security advisors zero findings, Vercel READY. Current customer pages omit build-stage wording; actual availability/payment gates remain intact. See [work/production-ux-api.md](work/production-ux-api.md) for the ten parts, archived policy versions and remaining external-runtime/provider verification.
+
+## Account and integration controls checkpoint — 2026-11-16
+
+Ten additional parts complete: immutable account terms snapshot and hash registry; verified explicit acceptance; own acceptance history; server-owned organization plan interest without billing; API-key expiry; atomic rotation; last-use metadata; bulk revocation; key search/status UI; guarded disabled-webhook secret rotation. Rule owners, limitations, hosted smoke and visual evidence are recorded in [account-security-controls.md](work/account-security-controls.md).
+
+Verified code0c3e0725f8410fa6aa425b09dbe38eee338dbbac; CI43923517826 SUCCESS (80 code/database +31 Chromium,18 provenance, build/type/container gates). Vercel dpl_BHjoxVnKN7tfSNFmV5X1YUcsTrzs READY, Supabase APIv9 ACTIVE; account_security_controls applied, hosted two-tenant smoke rolled back, zero synthetic users, zero security-advisor findings. Real external provider/runtime checks remain separately gated as described in the work report. Billing remains disabled.
