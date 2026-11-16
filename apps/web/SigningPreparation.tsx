@@ -101,7 +101,7 @@ export function SigningPreparation({
       )}
       {!locked&&<TemplateApply orgId={orgId} documents={documents} recipients={recipients} fields={fields} disabled={busy||!loaded} onApply={(v,name,version)=>{setFields(v);setSelected(v.at(-1)?.id??'');setNotice('Fält från '+name+' (version '+version+') har lagts in. Spara dokumentfälten för att behålla dem.');}}/>}
       {notice&&<p role="status">{notice}</p>}
-      <p className="muted">{dirty?'Dokumentfälten har osparade ändringar.':'Dokumentfälten är sparade.'}</p>
+      {dirty&&<p className="muted">Dokumentfälten har osparade ändringar.</p>}
       <label>
         Dokument att förhandsvisa
         <select
