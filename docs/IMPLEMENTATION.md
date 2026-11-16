@@ -41,7 +41,7 @@ Local: 32 domain/security/PostgreSQL tests passed; TypeScript checks for web/wor
 
 CI: [run 43823147474](https://github.com/heke99/avtalslank/actions/runs/43823147474) passed at commit e3c8019e5675999151995a4781cc98069e534c18, including 32 code/database tests and five Chromium UI tests. Browser tests use mocked transport; they do not prove live Supabase login, provider signatures or email delivery. Screenshots are available in the browser-verification Actions artifact. Local Chromium remains blocked by this workspace's socket restrictions; CI supplies the browser verification.
 
-Hosted: third migration workspace_operations applied. Transactional two-tenant smoke expanded with editing, ordering, contacts, profile, last-owner protection, usage, copying and removal; passed with all synthetic records rolled back. Supabase security advisors: zero findings. API v3 ACTIVE; health 200, unauthenticated resources 401 and fake API key on /v1/methods 401.
+Hosted: third migration workspace_operations applied. Transactional two-tenant smoke expanded with editing, ordering, contacts, profile, last-owner protection, usage, copying and removal; passed with all synthetic records rolled back. Supabase security advisors: zero findings. API v5 ACTIVE; health 200, unauthenticated resources 401 and fake API key on /v1/methods 401.
 
 Web: Vercel project prj_QstypXKAzXe8Yy3cEX22lEmemfmJ, deployed from e3c8019e5675999151995a4781cc98069e534c18; deployment dpl_2g43jh1mLkT6sBWaZWN2oAEB9VnV READY. URL https://avtalslank.vercel.app. Vercel reports production target on its generated hostname; no custom domain or existing OPS DNS was changed. Live login page inspected visually in browser; workspace UI covered in mocked CI scenarios. No production sign-in credentials were created for review.
 
@@ -51,4 +51,10 @@ Railway: private project d6d18789-7d93-4c36-ab98-6bdff50109fe, staging 30204f54-
 
 User explicitly approved public publication on 2026-11-16. Foundation and second implementation are published to heke99/avtalslank through the GitHub connection. The prior publication block is resolved.
 
-Not production-ready for signing: public signer sessions, delivery/email, verified BankID/Freja configuration and evidence verification, final PDF/evidence production, full PDF field placement, team invitations, webhook delivery, API file upload, retention cleanup and payment checkout remain. All signing methods remain disabled until those paths are verified. Contact/team/organization administration does not activate signing or payments.
+Not production-ready for signing: public signer sessions, delivery/email, verified BankID/Freja configuration and evidence verification, final PDF/evidence production, full PDF field placement, Supabase Auth redirect URLs/SMTP and real email verification, team invitations, webhook delivery, API file upload, retention cleanup and payment checkout remain. All signing methods remain disabled until those paths are verified. Contact/team/organization administration does not activate signing or payments.
+
+## Final verification addendum
+
+[CI run 43824350412](https://github.com/heke99/avtalslank/actions/runs/43824350412) passed on 6cf9c087a6a9e197946fea698592a0e268a225a7: 32 code/database tests and all six Chromium UI scenarios. The sixth exercises editing, moving, removing and copying recipients and verifies the new draft editor does not keep the old title. Explicit accessible names distinguish manual, saved-contact and edited-recipient method selectors.
+
+The deployed generated hostname was added to the exact Edge CORS allowlist; no wildcard origin access. API v5 includes this deployment-origin fix. Production browser-auth registration, recovery email redirects and SMTP delivery are still unverified; configure the Avtalslänk project's Site URL to https://avtalslank.vercel.app and allow that URL plus /reset-password while testing, then app.avtalslank.se at domain cutover. Do not reuse donor Auth or SMTP credentials.

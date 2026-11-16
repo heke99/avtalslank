@@ -14,7 +14,7 @@ const publicKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 const allowedOrigins = new Set(
   (
     Deno.env.get("ALLOWED_ORIGINS") ??
-    "https://avtalslank.se,https://app.avtalslank.se,http://localhost:5173,http://127.0.0.1:5173"
+    "https://avtalslank.se,https://app.avtalslank.se,https://avtalslank.vercel.app,http://localhost:5173,http://127.0.0.1:5173"
   ).split(","),
 );
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
