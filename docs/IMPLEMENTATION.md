@@ -76,3 +76,9 @@ The historical pending list above predates connected signing-v1 and this iterati
 Public home/hero, product journey, planned Start/Team/API comparison, plan-aware registration, API guide/OpenAPI download, privacy, necessary-only cookie information/settings, account terms, security/data-protection information, help/contact and FAQ are implemented. Ten public pages are prerendered with metadata, sitemap and robots. The signed-in workspace remains at root; signed-out root is public, with explicit /login and /signup. All evidence and commercial/legal launch boundaries are in [work/public-launch.md](work/public-launch.md).
 
 Verified c3f82f1a1afcaeebca7dc2f73106360766ee2f35 in CI 43901686204: 65 code/database tests, 19 browser scenarios, container and build checks passed. No new DB migration or signing capability activation. Planned plan selection is declared interest only; billing remains disabled.
+
+## Register design and workspace usability (2026-11-16)
+
+Replaced the prior split hero/mock document/italic slogan and subscription cards with a full-width register heading, factual service details and ruled subscription rows. Added an interactive walkthrough, method overview, selectable/copyable server API examples, actual-data onboarding checklist, agreement sorting and Swedish-date filtering, current-organization visible-row CSV export with formula neutralization, and restart of unfinished TOTP setup. Full contract/evidence: [work/register-and-workspace.md](work/register-and-workspace.md).
+
+Verified 36bcbee3ec6605c14da7c258ee64c4cdd6f22bc4 in CI 43908629372: 70 code/database tests, 23 browser scenarios, build/type/provenance/static artifact and container checks pass. Live public UI visually inspected; Vercel deployment READY. No billing/provider activation or database migration.
