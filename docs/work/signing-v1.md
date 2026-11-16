@@ -66,3 +66,7 @@ Next activation action: provision dedicated server variables using docs/SIGNING_
 ### Completed container/browser release verification
 
 [CI run 43838642068](https://github.com/heke99/avtalslank/actions/runs/43838642068) passed on d3918d7853bccb1050326dba04952782a4b3587f: verify job (58 code/database tests, nine Chromium scenarios) and worker-container job both succeeded. The container built, qpdf 11.3.0 ran and the unconfigured packaged worker correctly returned HTTP 503 with configured=false, healthy=false and signingConfigured=false. This is container packaging/fail-closed verification, not a live scanner/email integration result. Vercel deployment dpl_B36eBF3kHKdTaXbY5WxYNMjdukYc is READY for the same code. Dedicated Railway runtime provisioning remains blocked as described above; no real email, contract or charge was sent in testing.
+
+## Runtime status superseded — 2026-11-16
+
+Railway worker and private ClamAV are now deployed in staging/Amsterdam. Worker /live healthcheck passed, and actual private scanner/EICAR and PDF probes passed. The worker's own database server key is still missing, so business readiness and signing remain disabled. See [railway-runtime.md](railway-runtime.md) for exact deployments,100-test/38-browser CI evidence and remaining credential/provider work. Earlier statements above that no Railway source/deployment exists are historical.
