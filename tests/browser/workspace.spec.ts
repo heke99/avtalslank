@@ -637,7 +637,7 @@ test('MFA enrollment sends challenge and code to Supabase, not application datab
 });
 test('status filtering and operational health do not claim signing readiness',async({page})=>{
  await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Filteravtal');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByRole('button',{name:'Avtal',exact:true}).click();
- await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toBeVisible();await page.getByLabel('Status',{exact:true}).selectOption('completed');await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toHaveCount(0);await page.getByLabel('Status',{exact:true}).selectOption('draft');await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toBeVisible();await page.getByLabel('Filtrera avtal efter status',{exact:true}).selectOption('completed');await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toHaveCount(0);await page.getByLabel('Filtrera avtal efter status',{exact:true}).selectOption('draft');await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByText('Dokumentarbetare: Ingen aktuell beredskapssignal')).toBeVisible();await expect(page.getByText('Signeringsutskick: Inte konfigurerat')).toBeVisible();
 });
 test('sender reminder shows queue acceptance and cooldown errors',async({page})=>{

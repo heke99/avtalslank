@@ -22,3 +22,20 @@ Local verification: npm run verify passes with 62 code/database tests, including
 Hosted evidence 2026-11-16: team_and_operations applied; API v7 ACTIVE. Expanded two-tenant SQL smoke passed and rolled back: wrong email denied, confirmed invite accepted, leave invalidates access, exact accept retry cannot restore membership, last owner denied, readiness projection scoped. Security advisor returned zero findings. Live HTTP: /health 200, unauthenticated /v1/status and /v1/team/invitations both 401. Vercel deployment dpl_B19dnorB44DFdgsWYByDqs3DfbyJ READY at 01d7c337f5abb2e091e386237eec03b355576b92.
 
 CI 43841774864: 62 code/database tests and worker-container checks passed; 13/15 browser cases passed. Two test selectors omitted the visible version in the agreement button's accessible name. Corrected to the explicitly named Open buttons; rerun pending. No production capability was activated.
+
+| Part | Rule owner | Verification |
+| --- | --- | --- |
+| 1. Team invitation management | al_team_command | PostgreSQL owner/admin, duplicate/revoke/tenant cases; browser form |
+| 2. Accept invitation / continue account | al_team_command + JoinInvitation | Confirmed email binding, accept retry cannot rejoin; browser fragment and explicit acceptance |
+| 3. Leave organization | al_team_command | Last owner denied, active membership checked after leave; hosted rollback smoke |
+| 4. MFA | Supabase Auth + al_can_access + Edge | PostgreSQL AAL1 deny/AAL2 allow; SDK enrollment/challenge/verify transport in browser |
+| 5. Password change | Supabase Auth | Browser nonce and confirmation/mismatch; real server Secure password change setting remains required |
+| 6. Global signout | Supabase Auth | Browser asserts global logout endpoint and login screen; JWT lifetime explicitly disclosed |
+| 7. Reminders | al_remind_signer | PostgreSQL pending/cooldown/max/reconcile/signed/foreign envelope; browser queue/error |
+| 8. Operational status | al_operational_status | Tenant denial, own queue projection, authenticated Edge and browser status |
+| 9. Swedish activity labels | domain/activity | Browser activity history; raw event kind retained in export |
+| 10. Agreement status filter | App | Browser draft/completed/all control with actual rendered rows |
+
+Provider/Auth browser tests use network doubles. PostgreSQL tests run the actual migration and roles; the hosted smoke runs against the real Supabase project and rolls back synthetic data. These are distinct forms of evidence.
+
+CI 43842202287 passed 14/15 browser scenarios; the remaining status filter label included its option text. Added an explicit accessible name to the select and updated that scenario. All existing signing/reminder/MFA/account scenarios pass. Final rerun pending.

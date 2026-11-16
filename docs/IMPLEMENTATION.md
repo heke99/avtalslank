@@ -64,3 +64,9 @@ The deployed generated hostname was added to the exact Edge CORS allowlist; no w
 ## UI revision (2026-11-16)
 
 Replaced promotional login and dashboard composition with a compact operational interface: system fonts, navy actions, neutral surfaces, grouped status counters, direct Swedish headings and clearer form contrast. Removed paper illustrations, decorative hero and aspirational copy. Updated browser expectations for the new headings; no database or signing logic changed.
+
+## Account and operations iteration (2026-11-16)
+
+Current account work and evidence are tracked in [work/account-operations.md](work/account-operations.md). Ten additions: invitation creation/revocation; invitation acceptance/account continuation; membership exit with last-owner protection and API-key revocation; TOTP enrollment/step-up with database and Edge AAL2 enforcement; nonce/password confirmation UI; global signout; rate-limited signing reminders; tenant-scoped operational status; Swedish activity labels; agreement status filtering. New Avtalslänk code reuses existing actor, tenant, audit and outbox primitives; no new donor imports.
+
+The historical pending list above predates connected signing-v1 and this iteration. Read work/signing-v1.md and work/account-operations.md for current status. Live provider signing, dedicated Railway/scanner/email credentials and real Auth delivery remain separate release requirements. No payment model or prices were selected; billing remains disabled.

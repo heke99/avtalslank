@@ -456,7 +456,15 @@ function App() {
                         Visa alla <ArrowRight size={16} />
                       </button>
                     ) : (
-                      <><label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">Alla statusar</option>{Object.entries(statusLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label className="search">
+                      <>
+                        <label>
+                          Status
+                          <select aria-label="Filtrera avtal efter status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+                            <option value="">Alla statusar</option>
+                            {Object.entries(statusLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                          </select>
+                        </label>
+                        <label className="search">
                         <Search size={17} />
                         <input
                           aria-label="Sök avtal"
@@ -1893,7 +1901,7 @@ function SettingsView({
   return (
     <div className="settings-grid">
       <AccountSecurity/>
-      <OperationalStatus orgId={org.id}/>
+      <OperationalStatus key={org.id} orgId={org.id}/>
       <section className="panel detail-panel">
         <h2>Företag</h2>
         <dl>
