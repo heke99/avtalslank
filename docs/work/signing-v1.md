@@ -62,3 +62,7 @@ Next activation action: provision dedicated server variables using docs/SIGNING_
 - Supabase Edge avtalslank-api v6 ACTIVE; health 200 and invalid recipient link 401 observed. Both connected migrations are applied; hosted two-tenant rollback smoke passed and advisors returned no findings.
 - Vercel deployment dpl_CjDwLVrVYEELxNyRVtYAWgDgLaQq READY at code commit 602209b6d95d7c2188c62cf9934a79dff7bfecc2; stable hostname https://avtalslank.vercel.app.
 - A separate CI worker-container job now builds the packaged image and verifies qpdf plus fail-closed unconfigured readiness. Its observed result is recorded after completion. No Railway worker deployment is claimed.
+
+### Completed container/browser release verification
+
+[CI run 43838642068](https://github.com/heke99/avtalslank/actions/runs/43838642068) passed on d3918d7853bccb1050326dba04952782a4b3587f: verify job (58 code/database tests, nine Chromium scenarios) and worker-container job both succeeded. The container built, qpdf 11.3.0 ran and the unconfigured packaged worker correctly returned HTTP 503 with configured=false, healthy=false and signingConfigured=false. This is container packaging/fail-closed verification, not a live scanner/email integration result. Vercel deployment dpl_B36eBF3kHKdTaXbY5WxYNMjdukYc is READY for the same code. Dedicated Railway runtime provisioning remains blocked as described above; no real email, contract or charge was sent in testing.
