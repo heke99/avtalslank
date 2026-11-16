@@ -25,8 +25,8 @@ test('every public page renders on server without auth, private data or invented
         assert.ok(!html.includes('dangerouslySetInnerHTML'));
     }
     const plansHtml = renderToString(React.createElement(PublicSite, { path: '/abonnemang' }));
-    assert.ok(plansHtml.includes('Inga debiteringar'));
-    assert.ok(plansHtml.includes('Inte fastställt'));
+    assert.ok(plansHtml.includes('Ingen debitering startar vid registrering'));
+    assert.ok(plansHtml.includes('Pris och omfattning enligt separat offert'));
     const unknown = renderToString(React.createElement(PublicSite, { path: '/villkor', requestedVersion: 'unknown' }));
     assert.ok(unknown.includes('begärda dokumentversionen'));
     assert.ok(!unknown.includes('1. Parter och omfattning'));

@@ -1,3 +1,4 @@
+import {queryRoute} from "./query.ts";
 import {operationsRoute} from "./operations.ts";
 import { connectedRoute, publicSigning, boundedBytes } from "./connected.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.110.7";
@@ -45,6 +46,7 @@ const safeCodes = new Set([
   "DOCUMENT_TOTAL_LIMIT",
   "INVALID_INVITATION", "INVITATION_NOT_FOUND", "INVITATION_LIMIT", "ALREADY_MEMBER", "LAST_OWNER", "OWNER_REQUIRED", "RECIPIENT_NOT_PENDING", "DELIVERY_PENDING", "DELIVERY_RECONCILIATION_REQUIRED", "REMINDER_LIMIT", "REMINDER_COOLDOWN",
   "MFA_REQUIRED",
+  "INVALID_QUERY", "INVALID_CURSOR",
   "INVALID_ID",
   "INVALID_BODY",
   "INVALID_FIELDS",
@@ -88,6 +90,7 @@ Deno.serve(async (req: Request) => {
     "X-Request-Id": requestId,
     "X-Content-Type-Options": "nosniff",
     Vary: "Origin",
+    "Access-Control-Expose-Headers":"X-Request-Id",
   };
   if (origin && allowedOrigins.has(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
@@ -174,6 +177,8 @@ Deno.serve(async (req: Request) => {
       return connected;
     }
     if (connected) return response(connected);
+    const queryResult=await queryRoute(req,path,service,{actor:verifiedActor,keyHash:isApi?await sha256Hex(token):null,organizationId:isApi?null:new URL(req.url).searchParams.get('organizationId')});
+    if(queryResult)return response(queryResult);
     let action = "";
     let payload: Record<string, unknown> = {};
     let rpc = "";

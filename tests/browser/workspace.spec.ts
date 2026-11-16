@@ -215,7 +215,7 @@ test("desktop workspace: draft, Freja selection, readiness block, fields, billin
     page.getByRole("button", { name: "Skicka för signering" }),
   ).toBeDisabled();
   await expect(
-    page.getByText("Freja eID är inte aktiverat för skarpa utskick."),
+    page.getByText("Freja eID är inte tillgängligt för ditt företag."),
   ).toBeVisible();
   await page.getByRole("button", { name: "Mallar", exact: true }).click();
   await page.getByRole("button", { name: "Ny fältmall" }).click();
@@ -232,7 +232,7 @@ test("desktop workspace: draft, Freja selection, readiness block, fields, billin
   ).toBeVisible();
   await expect(
     page.getByText(
-      "Betalningsmodell och priser är ännu inte fastställda. Inga köp eller automatiska debiteringar sker.",
+      "Kontot har ingen aktiv betalplan. Ingen debitering startar utan en separat godkänd beställning.",
     ),
   ).toBeVisible();
 });
@@ -640,7 +640,7 @@ test('MFA enrollment sends challenge and code to Supabase, not application datab
 test('status filtering and operational health do not claim signing readiness',async({page})=>{
  await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Filteravtal');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByRole('button',{name:'Avtal',exact:true}).click();
  await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toBeVisible();await page.getByLabel('Filtrera avtal efter status',{exact:true}).selectOption('completed');await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toHaveCount(0);await page.getByLabel('Filtrera avtal efter status',{exact:true}).selectOption('draft');await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByText('Dokumentarbetare: Ingen aktuell beredskapssignal')).toBeVisible();await expect(page.getByText('Signeringsutskick: Inte konfigurerat')).toBeVisible();
+ await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByText('Dokumenthantering: Kontakta support')).toBeVisible();await expect(page.getByText('Signeringsutskick: Kontakta support')).toBeVisible();
 });
 test('sender reminder shows queue acceptance and cooldown errors',async({page})=>{
  const envelopeId='33333333-3333-4333-8333-333333333333',recipientId='55555555-5555-4555-8555-555555555555';
@@ -658,4 +658,13 @@ test('unfinished MFA setup can be restarted without deleting other factors',asyn
  await workspace(page);let factors=[{id:'unfinished-own',status:'unverified',factor_type:'totp',friendly_name:'Avtalslänk'},{id:'unfinished-other',status:'unverified',factor_type:'totp',friendly_name:'Other app'}];const removed:string[]=[];
  await page.route('**/auth/v1/user',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors})}));await page.route('**/auth/v1/factors/*',route=>{expect(route.request().method()).toBe('DELETE');const id=route.request().url().split('/').at(-1)!;removed.push(id);factors=factors.filter(f=>f.id!==id);return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id})});});
  await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toHaveCount(0);page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Börja om inställningen'}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toBeVisible();expect(removed).toEqual(['unfinished-own']);expect(factors.map(f=>f.id)).toEqual(['unfinished-other']);
+});
+test('unsaved draft changes block navigation until confirmed and Ctrl+S saves through the existing command',async({page})=>{
+ await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Skyddat utkast');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByRole('button',{name:/Uppgifter/}).click();await page.getByLabel('Avtalets namn').fill('Ändrat utkast');await expect(page.getByRole('status')).toContainText('Osparade ändringar');page.once('dialog',d=>d.dismiss());await page.getByRole('button',{name:'Avtal',exact:true}).click();await expect(page.getByRole('heading',{name:'Skyddat utkast',exact:true})).toBeVisible();await page.keyboard.press('Control+s');await expect(page.getByRole('heading',{name:'Ändrat utkast',exact:true})).toBeVisible();await expect(page.getByRole('status')).toContainText('Ändringarna är sparade');await page.getByRole('button',{name:'Avtal',exact:true}).click();await expect(page.getByRole('button',{name:'Öppna Ändrat utkast',exact:true})).toBeVisible();
+});
+test('activity filtering searches localized and technical event names without claiming a complete archive',async({page})=>{
+ await workspace(page);await page.getByRole('button',{name:'Företag & team',exact:true}).click();await page.getByRole('tab',{name:'Aktivitetslogg',exact:true}).click();await expect(page.getByText('Företag skapat',{exact:true})).toBeVisible();await page.getByLabel('Sök i visade händelser').fill('ingen match');await expect(page.getByRole('status')).toContainText('Inga visade händelser');await page.getByLabel('Sök i visade händelser').fill('organization.created');await expect(page.getByText('Företag skapat',{exact:true})).toBeVisible();
+});
+test('invalid upload gives a specific PDF error and resets the upload state for retry',async({page})=>{
+ await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('PDF-kontroll');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByLabel('Ladda upp PDF').setInputFiles({name:'invalid.pdf',mimeType:'application/pdf',buffer:Buffer.from('not a pdf')});await expect(page.getByRole('alert')).toContainText('giltig PDF-fil');await expect(page.getByText('Välj en PDF att ladda upp',{exact:true})).toBeVisible();await expect(page.getByLabel('Ladda upp PDF')).toBeEnabled();
 });

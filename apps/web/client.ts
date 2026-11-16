@@ -27,16 +27,23 @@ export const friendlyError = (message: string) =>
     REMINDER_LIMIT: "Högst tre påminnelser kan skickas per mottagare.",
     MFA_REQUIRED: "Verifiera en kod från autentiseringsappen först.",
     PASSWORD_MISMATCH: "Lösenorden stämmer inte överens.",
+    NETWORK_ERROR: "Anslutningen avbröts. Kontrollera nätverket och försök igen.",
+    REQUEST_TIMEOUT: "Begäran tog för lång tid. Kontrollera resultatet innan du försöker igen.",
+    REQUEST_CANCELLED: "Begäran avbröts.",
+    INVALID_RESPONSE: "Tjänsten gav ett oväntat svar. Försök läsa in uppgifterna igen.",
+    DOCUMENT_TOO_LARGE: "PDF-filen får vara högst 10 MB.",
+    INVALID_PDF: "Filen kunde inte läsas som PDF. Välj en giltig PDF-fil.",
+    PDF_PAGE_LIMIT: "Dokumentet har fler sidor än vad som tillåts.",
     ACCESS_DENIED: "Du saknar behörighet till företaget.",
     ADMIN_REQUIRED: "Endast ägare och administratör får göra detta.",
     VERSION_CONFLICT: "Utkastet har ändrats. Öppna det igen innan du sparar.",
     DOCUMENT_SCAN_REQUIRED: "Dokumentkontrollen är inte klar ännu.",
     SIGNING_METHOD_NOT_READY:
-      "Den valda signeringsmetoden är ännu inte aktiverad.",
+      "Metoden är inte tillgänglig för ditt företag. Välj en annan metod eller kontakta support.",
     SIGNING_DELIVERY_NOT_CONFIGURED:
-      "Utskick för signering är ännu inte aktiverat.",
+      "Utskicket kunde inte startas. Ditt utkast är sparat. Kontakta support.",
     SIGNING_WORKER_NOT_READY:
-      "Signeringstjänsten är inte redo. Ditt utkast är sparat.",
+      "Tjänsten kan inte ta emot utskicket just nu. Ditt utkast är sparat.",
     INVALID_FIELD_ASSIGNMENT:
       "Kontrollera fältets dokument, sida och mottagare.",
     INVALID_FIELDS: "Kontrollera dokumentfälten.",
@@ -60,3 +67,4 @@ export async function rpc<T = unknown>(
   if (error) throw error;
   return data as T;
 }
+export function displayError(error:unknown){const e=error as {message?:string;requestId?:string|null};const message=friendlyError(e.message??'');return message+(e.requestId&&/^[a-z0-9-]{8,80}$/i.test(e.requestId)?` Referens: ${e.requestId}`:'');}

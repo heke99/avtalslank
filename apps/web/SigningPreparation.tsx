@@ -1,5 +1,6 @@
+import {requestJson} from "../../packages/http/src/index";
 import React, { useEffect, useState } from "react";
-import { apiUrl, supabase, friendlyError } from "./client";
+import { apiUrl, supabase, friendlyError,displayError } from "./client";
 type Doc = {
   id: string;
   name: string;
@@ -28,32 +29,8 @@ export async function envelopeApi(
   body?: unknown,
 ) {
   const { data } = await supabase.auth.getSession();
-  const r = await fetch(
-    `${apiUrl}/v1/envelopes/${id}/${operation}?organizationId=${orgId}`,
-    {
-      method: body === undefined ? "GET" : "POST",
-      headers: {
-        authorization: `Bearer ${data.session?.access_token}`,
-        "content-type": "application/json",
-      },
-      ...(body === undefined
-        ? {}
-        : {
-            body: JSON.stringify({
-              ...(body as object),
-              organizationId: orgId,
-            }),
-          }),
-    },
-  );
-  if (!r.ok) {
-    let code = "REQUEST_FAILED";
-    try {
-      code = (await r.json()).error.code;
-    } catch {}
-    throw Error(code);
-  }
-  return (await r.json()).data;
+  const result=await requestJson(`${apiUrl}/v1/envelopes/${id}/${operation}?organizationId=${orgId}`,{method:body===undefined?'GET':'POST',headers:{authorization:`Bearer ${data.session?.access_token}`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify({...body as object,organizationId:orgId})})});
+  return result.data;
 }
 export function SigningPreparation({
   orgId,
@@ -90,7 +67,7 @@ export function SigningPreparation({
         }
       })
       .catch((e) => {
-        if (active) setError(friendlyError(e.message));
+        if (active) setError(displayError(e));
       });
     return () => {
       active = false;
@@ -368,7 +345,7 @@ export function SigningPreparation({
                 });
                 onSaved(e);
               } catch (e) {
-                setError(friendlyError((e as Error).message));
+                setError(displayError(e));
               } finally {
                 setBusy(false);
               }
@@ -396,7 +373,7 @@ export function DeliveryHistory({
     try {
       setItems(await envelopeApi(orgId, envelopeId, "deliveries"));
     } catch (e) {
-      setError(friendlyError((e as Error).message));
+      setError(displayError(e));
     }
   }
   useEffect(() => {

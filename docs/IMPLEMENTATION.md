@@ -82,3 +82,9 @@ Verified c3f82f1a1afcaeebca7dc2f73106360766ee2f35 in CI 43901686204: 65 code/dat
 Replaced the prior split hero/mock document/italic slogan and subscription cards with a full-width register heading, factual service details and ruled subscription rows. Added an interactive walkthrough, method overview, selectable/copyable server API examples, actual-data onboarding checklist, agreement sorting and Swedish-date filtering, current-organization visible-row CSV export with formula neutralization, and restart of unfinished TOTP setup. Full contract/evidence: [work/register-and-workspace.md](work/register-and-workspace.md).
 
 Verified 36bcbee3ec6605c14da7c258ee64c4cdd6f22bc4 in CI 43908629372: 70 code/database tests, 23 browser scenarios, build/type/provenance/static artifact and container checks pass. Live public UI visually inspected; Vercel deployment READY. No billing/provider activation or database migration.
+
+## Production customer language and API work (2026-11-16, in progress)
+
+Customer-facing launch/build wording is replaced by ordinary service, quote and account-availability language. Actual capability/payment controls remain authoritative. Policy version 2026-11-16.2 preserves the earlier public documents as standalone archived HTML. No price or completed DPA is fabricated.
+
+New bounded API cursor listing and filters, shared timed HTTP client with GET-only retry, session startup recovery, dirty-draft navigation protection, upload stage feedback, filtered activity search/export and keyboard draft save are tracked in [work/production-ux-api.md](work/production-ux-api.md). Local suite: 74 code/database tests pass; hosted migration, Edge deployment and browser CI are next.

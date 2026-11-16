@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Avtalslänk API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled."
   },
   "servers": [
@@ -48,12 +48,88 @@
     },
     "/v1/envelopes": {
       "get": {
-        "summary": "List up to 100 organization-bound envelopes",
+        "summary": "List organization-bound envelopes with bounded keyset pagination",
         "responses": {
           "200": {
-            "description": "Envelope list"
+            "description": "data: envelope array; page.nextCursor: opaque string or null."
+          },
+          "400": {
+            "description": "INVALID_QUERY or INVALID_CURSOR with requestId."
           }
-        }
+        },
+        "description": "Stable order: updated_at descending, id descending. Keep the same filters when following page.nextCursor. Cursor is an opaque continuation, not authorization. Concurrent updates can move records between pages; this is not a snapshot export. User tokens require organizationId; API-key organization is derived server-side.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "sent",
+                "in_progress",
+                "completed",
+                "declined",
+                "expired",
+                "cancelled"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "description": "Literal case-insensitive title substring; percent and underscore have no wildcard meaning."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Inclusive updated_at lower bound, ISO 8601 UTC with Z suffix."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Inclusive updated_at upper bound, ISO 8601 UTC with Z suffix."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Required for user tokens only."
+          }
+        ]
       },
       "post": {
         "summary": "Create an idempotent draft",

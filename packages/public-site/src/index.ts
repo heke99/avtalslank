@@ -1,4 +1,4 @@
-export const legalVersion = '2026-11-16';
+export const legalVersion = '2026-11-16.2';
 export const plans = [
     { id: 'start', name: 'Start', audience: 'För enstaka avtal', description: 'Ett enkelt upplägg för dig som skickar avtal då och då.', features: ['Webbapp för dokument och mottagare', 'Sparade kontakter och återanvändbara mallar', 'Överblick över avtal och händelser'] },
     { id: 'team', name: 'Team', audience: 'För företag som arbetar tillsammans', description: 'En gemensam arbetsyta för kollegor, avtal och uppföljning.', features: ['Arbetsyta med flera användare', 'Roller för ägare, administratörer, avsändare och läsare', 'Gemensamma kontakter, mallar och aktivitetslogg'] },

@@ -1,15 +1,13 @@
+import {requestJson} from "../../packages/http/src/index";
 import {restartableFactors} from "../../packages/workspace/src/index";
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, apiUrl, friendlyError } from './client';
+import { supabase, apiUrl, friendlyError,displayError } from './client';
 export async function accountApi(path: string, orgId: string | null, body?: Record<string, unknown>) {
     const { data } = await supabase.auth.getSession();
     if (!data.session)
         throw Error('AUTH_REQUIRED');
-    const response = await fetch(apiUrl + path + (body ? '' : orgId ? '?organizationId=' + encodeURIComponent(orgId) : ''), { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify({ ...body, organizationId: orgId }) } : {}) });
-    const result = await response.json();
-    if (!response.ok)
-        throw Error(result.error?.code ?? result.error ?? 'REQUEST_FAILED');
+    const result=await requestJson(apiUrl+path+(body?'':orgId?'?organizationId='+encodeURIComponent(orgId):''),{method:body?'POST':'GET',headers:{Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify({...body,organizationId:orgId})}:{})});
     return result.data;
 }
 function useOperation() { const [busy, setBusy] = useState(false), [message, setMessage] = useState(''); async function run(fn: () => Promise<void>) { if (busy)
@@ -17,7 +15,7 @@ function useOperation() { const [busy, setBusy] = useState(false), [message, set
     await fn();
 }
 catch (e) {
-    setMessage(friendlyError((e as Error).message));
+    setMessage(displayError(e));
 }
 finally {
     setBusy(false);
@@ -101,7 +99,7 @@ export function AccountSecurity() {
 }
 export function OperationalStatus({ orgId }: {
     orgId: string;
-}) { const op = useOperation(); const [status, setStatus] = useState<any>(null); async function load() { setStatus(await accountApi('/v1/status', orgId)); } useEffect(() => { op.run(load); }, [orgId]); return <section className="panel detail-panel full-grid"><h2>Driftstatus</h2>{op.message && <p role="alert">{op.message}</p>}{status && <><p>Dokumentarbetare: {status.workerFresh ? 'Aktuell beredskapssignal' : 'Ingen aktuell beredskapssignal'}</p><p>Signeringsutskick: {status.signingConfigured ? 'Förberett; leveransen behöver verifieras' : 'Inte konfigurerat'}</p><h3>Företagets leveransjobb</h3>{Object.entries(status.deliveries).map(([k, n]) => <p key={k}>{k}: {String(n)}</p>)}<p className="muted">En beredskapssignal är inte bevis på en genomförd signering eller leverans.</p></>}<button className="secondary" disabled={op.busy} onClick={() => op.run(load)}>Uppdatera driftstatus</button></section>; }
+}) { const op = useOperation(); const [status, setStatus] = useState<any>(null); async function load() { setStatus(await accountApi('/v1/status', orgId)); } useEffect(() => { op.run(load); }, [orgId]); return <section className="panel detail-panel full-grid"><h2>Driftstatus</h2>{op.message && <p role="alert">{op.message}</p>}{status && <><p>Dokumenthantering: {status.workerFresh ? 'Tjänsten svarar' : 'Kontakta support'}</p><p>Signeringsutskick: {status.signingConfigured ? 'Se leveranshistoriken' : 'Kontakta support'}</p><h3>Företagets leveransjobb</h3>{Object.entries(status.deliveries).map(([k, n]) => <p key={k}>{k}: {String(n)}</p>)}<p className="muted">Följ varje avtals status och leveranshistorik för att se resultatet.</p></>}<button className="secondary" disabled={op.busy} onClick={() => op.run(load)}>Uppdatera driftstatus</button></section>; }
 export function RemindRecipient({ orgId, envelopeId, recipientId }: {
     orgId: string;
     envelopeId: string;

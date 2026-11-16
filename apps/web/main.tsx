@@ -39,7 +39,7 @@ import {
   Grip,
   PenLine,
 } from "lucide-react";
-import { configured, supabase, rpc, friendlyError, apiUrl } from "./client";
+import { configured, supabase, rpc, friendlyError, displayError, apiUrl } from "./client";
 import {
   methodLabels,
   statusLabels,
@@ -120,6 +120,8 @@ const date = (s: string) =>
 function App() {
   const [session, setSession] = useState<Session | null>(null),
     [loading, setLoading] = useState(true),
+    [sessionError,setSessionError]=useState(false),
+    [draftDirty,setDraftDirty]=useState(false),
     [orgs, setOrgs] = useState<Org[]>([]),
     [orgId, setOrgId] = useState(""),
     [view, setView] = useState("overview"),
@@ -141,19 +143,17 @@ function App() {
   const scope = useRef("");
   scope.current = `${session?.user.id ?? ""}:${orgId}`;
   function notify(error: unknown) {
-    setNotice(friendlyError((error as { message?: string }).message ?? ""));
+    setNotice(displayError(error));
   }
   useEffect(() => {
     if (!configured) {
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    let active=true;const timer=setTimeout(()=>{if(active){setSessionError(true);setLoading(false);}},12000);
+    supabase.auth.getSession().then(({data,error})=>{if(!active)return;clearTimeout(timer);if(error){setSessionError(true);}else{setSession(data.session);setSessionError(false);}setLoading(false);}).catch(()=>{if(active){clearTimeout(timer);setSessionError(true);setLoading(false);}});
     const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => data.subscription.unsubscribe();
+    return () => {active=false;clearTimeout(timer);data.subscription.unsubscribe();};
   }, []);
   async function loadOrgs() {
     const { data, error } = await supabase
@@ -220,6 +220,7 @@ function App() {
     ["settings", "Inställningar", Settings],
     ["workspace", "Företag & team", Users],
   ] as const;
+  if(sessionError)return <div className="center-screen"><Brand/><h1>Inloggningen kunde inte läsas in</h1><p>Kontrollera anslutningen och läs in sidan igen.</p><button className="primary" onClick={()=>location.reload()}>Försök igen</button><a href="/hjalp">Kontakta support</a></div>;
   if (loading)
     return (
       <div className="center-screen">
@@ -251,7 +252,7 @@ function App() {
           <select
             aria-label="Aktivt företag"
             value={orgId}
-            onChange={(e) => setOrgId(e.target.value)}
+            onChange={(e) => {if(draftDirty&&!confirm("Du har osparade ändringar. Vill du byta företag?"))return;setDraftDirty(false);setOrgId(e.target.value);}}
           >
             {orgs.map((o) => (
               <option key={o.id} value={o.id}>
@@ -266,7 +267,8 @@ function App() {
               key={id}
               className={view === id ? "active" : ""}
               onClick={() => {
-                setView(id);
+                if(draftDirty&&!confirm('Du har osparade ändringar. Vill du lämna utkastet?'))return;
+                setDraftDirty(false);setView(id);
                 setSelected(null);
                 setMobileMenu(false);
               }}
@@ -288,7 +290,7 @@ function App() {
               Kontakta oss <ArrowUpRight size={14} />
             </a>
           </div>
-          <button className="profile" onClick={() => supabase.auth.signOut()}>
+          <button className="profile" onClick={() => {if(draftDirty&&!confirm("Du har osparade ändringar. Vill du logga ut?"))return;supabase.auth.signOut();}}>
             <span className="user-avatar">
               {session.user.email?.slice(0, 1).toUpperCase()}
             </span>
@@ -353,8 +355,10 @@ function App() {
               capabilities={capabilities}
               busy={busy}
               action={action}
+              onDirty={setDraftDirty}
               back={() => {
-                setSelected(null);
+                if(draftDirty&&!confirm('Du har osparade ändringar. Vill du lämna utkastet?'))return;
+                setDraftDirty(false);setSelected(null);
                 reload().catch(notify);
               }}
               onSaved={(v) => {
@@ -1051,8 +1055,9 @@ function EnvelopeDetail({
   busy,
   action,
   back,
-  onSaved,
+  onSaved,onDirty,
 }: {
+  onDirty:(dirty:boolean)=>void;
   envelope: Envelope;
   orgId: string;
   capabilities: ProviderCapability[];
@@ -1068,6 +1073,11 @@ function EnvelopeDetail({
     [title, setTitle] = useState(e.title),
     [message, setMessage] = useState(e.message),
     [sequential, setSequential] = useState(e.sequential);
+  const draftForm=useRef<HTMLFormElement>(null);
+  const [uploadStage,setUploadStage]=useState('');
+  const dirty=e.status==='draft'&&(title!==e.title||message!==e.message||sequential!==e.sequential);
+  useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
+  useEffect(()=>{const leave=(event:BeforeUnloadEvent)=>{if(dirty){event.preventDefault();event.returnValue='';}};const save=(event:KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'&&draftForm.current){event.preventDefault();if(!busy)draftForm.current.requestSubmit();}};window.addEventListener('beforeunload',leave);window.addEventListener('keydown',save);return()=>{window.removeEventListener('beforeunload',leave);window.removeEventListener('keydown',save);};},[dirty,busy]);
   async function load() {
     const [a, b, c] = await Promise.all([
       supabase.from("al_documents").select("*").eq("envelope_id", e.id),
@@ -1112,9 +1122,10 @@ function EnvelopeDetail({
         envelopeId={e.id}
         title={e.title}
         action={action}
-        busy={busy}
+        busy={busy||dirty}
         onSaved={onSaved}
       />
+      {!locked&&<p role="status">{dirty?'Osparade ändringar':'Ändringarna är sparade'}</p>}
       <div className="steps">
         {["Dokument", "Mottagare & metod", "Uppgifter", "Granska & skicka"].map(
           (s, i) => (
@@ -1141,7 +1152,7 @@ function EnvelopeDetail({
               <label className={`upload-zone ${busy ? "disabled" : ""}`}>
                 <Upload size={30} />
                 <strong>
-                  {busy ? "Laddar upp…" : "Välj en PDF att ladda upp"}
+                  {uploadStage || "Välj en PDF att ladda upp"}
                 </strong>
                 <span>Dokumentet kopplas till det här avtalet.</span>
                 <input
@@ -1153,6 +1164,7 @@ function EnvelopeDetail({
                     const file = event.target.files?.[0];
                     if (!file) return;
                     action(async () => {
+                      try{setUploadStage("Läser PDF-filen…");
                       const name = safePdfFilename(file.name);
                       if (file.size > 10485760)
                         throw new Error("DOCUMENT_TOO_LARGE");
@@ -1160,6 +1172,7 @@ function EnvelopeDetail({
                       if (!isPdf(bytes)) throw new Error("INVALID_PDF");
                       const id = crypto.randomUUID();
                       const hash = await sha256Hex(bytes);
+                      setUploadStage("Kontrollerar PDF-filen…");
                       const { inspectUpload } = await import(
                         "../../packages/signing/src/index.ts"
                       );
@@ -1174,6 +1187,7 @@ function EnvelopeDetail({
                         bytes,
                       );
                       const path = `${orgId}/${e.id}/${id}.pdf`;
+                      setUploadStage("Laddar upp dokumentet…");
                       const { error } = await supabase.storage
                         .from("al-documents")
                         .upload(path, file, {
@@ -1181,6 +1195,7 @@ function EnvelopeDetail({
                           upsert: false,
                         });
                       if (error) throw error;
+                      setUploadStage("Sparar dokumentuppgifterna…");
                       await rpc("al_register_document", {
                         p_org: orgId,
                         p_envelope: e.id,
@@ -1190,6 +1205,7 @@ function EnvelopeDetail({
                         p_byte_size: file.size,
                       });
                       await load();
+                      }finally{setUploadStage("");}
                     });
                     event.target.value = "";
                   }}
@@ -1331,7 +1347,7 @@ function EnvelopeDetail({
                       <option key={key} value={key}>
                         {label}
                         {!capabilities.find((c) => c.method === key)?.enabled
-                          ? " · förberedd, ej aktiverad"
+                          ? " · kontakta oss"
                           : ""}
                       </option>
                     ))}
@@ -1362,7 +1378,7 @@ function EnvelopeDetail({
               onSaved={onSaved}
             />
             <h2>Uppgifter och meddelande</h2>
-            <form
+            <form ref={draftForm}
               onSubmit={(ev) => {
                 ev.preventDefault();
                 action(async () => {
@@ -1883,7 +1899,7 @@ function Developer({
         <pre>{`POST ${apiUrl}/v1/envelopes\nAuthorization: Bearer <din-api-nyckel>\nIdempotency-Key: <unik-referens>\nContent-Type: application/json\n\n{"draft":{"title":"Samarbetsavtal"}}`}</pre>
         <p className="muted">
           Nyckeln ger aldrig rätt att sätta signeringsstatus eller kringgå
-          dokumentkontrollen. Skarp signering aktiveras efter verifiering.
+          dokumentkontrollen. Tillgängliga metoder visas i företagets inställningar.
         </p>
       </section>
     </>
@@ -1932,11 +1948,10 @@ function SettingsView({
         <h2>Betalning och förbrukning</h2>
         <span className="badge draft">Ingen betalning aktiverad</span>
         <p>
-          Betalningsmodell och priser är ännu inte fastställda. Inga köp eller
-          automatiska debiteringar sker.
+          Kontot har ingen aktiv betalplan. Ingen debitering startar utan en separat godkänd beställning.
         </p>
         <p className="muted">
-          Tjänsten förbereds för abonnemang, per dokument eller en kombination.{" "}
+          Pris och omfattning framgår av er godkända beställning. Kontakta oss för frågor om betalplanen.{" "}
           {billing?.enabled
             ? "Kontakta administratören för aktuell betalningsstatus."
             : ""}
@@ -1945,15 +1960,14 @@ function SettingsView({
       <section className="panel detail-panel full-grid">
         <h2>Signeringsmetoder</h2>
         <p className="muted">
-          Du kan förbereda metodval i utkast. Skarpa utskick kräver aktiverad
-          anslutning.
+          Välj metod per mottagare. Kontakta support om ni behöver en annan anslutning.
         </p>
         {capabilities.map((c) => (
           <div className="list-row" key={c.method}>
             <ShieldCheck size={20} />
             <span className="grow">
               <strong>{methodLabels[c.method]}</strong>
-              <small>{c.reason ?? "Tillgänglig för signering"}</small>
+              <small>{c.enabled ? "Tillgänglig för signering" : "Kontakta oss för att använda metoden"}</small>
             </span>
             <span className={`badge ${c.enabled ? "completed" : "draft"}`}>
               {c.enabled ? "Aktiv" : "Ej aktiverad"}

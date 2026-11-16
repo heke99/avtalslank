@@ -83,4 +83,14 @@ do $$declare a uuid:='f8160001-0000-4000-8000-000000000001';b uuid:='f8160002-00
  if not(v ?& array['workerFresh','methods','deliveries']) then raise exception 'STATUS_SHAPE';end if;
 end $$;
 reset role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+set local role service_role;
+do $$declare o uuid:=current_setting('al.smoke_org_a')::uuid;v jsonb;begin
+ v:=public.al_query_envelopes('f8160001-0000-4000-8000-000000000001',null,o,'{"limit":1}');
+ if jsonb_array_length(v->'items')<>1 then raise exception 'QUERY_MISSING_DATA';end if;
+ if exists(select 1 from jsonb_array_elements(v->'items') x where x->>'organization_id'<>o::text) then raise exception 'QUERY_TENANT_LEAK';end if;
+ begin perform public.al_query_envelopes('f8160002-0000-4000-8000-000000000002',null,o,'{}');raise exception 'QUERY_FOREIGN_ALLOWED';exception when others then if sqlerrm<>'ACCESS_DENIED' then raise;end if;end;
+ begin perform public.al_query_envelopes('f8160001-0000-4000-8000-000000000001',null,o,'{"limit":101}');raise exception 'QUERY_LIMIT_ALLOWED';exception when others then if sqlerrm<>'INVALID_QUERY' then raise;end if;end;
+end $$;
+reset role;
 rollback;

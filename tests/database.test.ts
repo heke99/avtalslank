@@ -1767,5 +1767,28 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await assert.rejects(operationsRoute(request,'/v1/team/invitations',client,{actor:null,keyHash:'a'.repeat(64),organizationId:null},{email:'http@example.invalid',role:'owner'}),/AUTH_REQUIRED/);
     await assert.rejects(operationsRoute(request,'/v1/team/invitations',client,identity,{email:'http@example.invalid',role:'owner'}),/INVALID_INVITATION/);
   });
+  await t.test('cursor API listing enforces roles and tenant scope, intersects filters and does not skip tied timestamps',async()=>{
+    await actor(a);await assert.rejects(db.query('select public.al_query_envelopes($1,null,$2)',[a,oa]),/permission denied/);
+    await db.exec('reset role');
+    const ids=['cc000001-0000-4000-8000-000000000001','cc000001-0000-4000-8000-000000000002','cc000001-0000-4000-8000-000000000003'];
+    for(const id of ids)await db.query("insert into public.al_envelopes(id,organization_id,title,status,created_by,updated_at) values($1,$2,'Cursor literal %_','draft',$3,'2026-11-16T10:00:00Z')",[id,oa,a]);
+    await service();
+    const list=async(actor:string,org:string,filters:any)=>(await one('select public.al_query_envelopes($1,null,$2,$3) data',[actor,org,filters])).data;
+    await assert.rejects(list(b,oa,{}),/ACCESS_DENIED/);
+    const first=await list(a,oa,{limit:2,query:'literal %_',status:'draft',from:'2026-11-16T00:00:00Z',to:'2026-11-16T23:59:59Z'});assert.equal(first.items.length,2);assert.ok(first.nextCursor);
+    const second=await list(a,oa,{limit:2,query:'literal %_',cursor:first.nextCursor});assert.equal(second.items.length,1);assert.equal(second.nextCursor,null);assert.deepEqual([...first.items,...second.items].map((r:any)=>r.id),ids.toReversed());
+    assert.equal((await list(a,oa,{query:'nonexistent %_'})).items.length,0);
+    for(const filters of [{limit:101},{status:'signed'},{from:'2026-11-17T00:00:00Z',to:'2026-11-16T00:00:00Z'}])await assert.rejects(list(a,oa,filters),/INVALID_QUERY/);
+    await assert.rejects(list(a,oa,{cursor:{id:ids[0]}}),/INVALID_CURSOR/);
+    await assert.rejects(db.query('select public.al_query_envelopes(null,$1,null,$2)',['not-a-real-key',{}]),/INVALID_API_KEY/);
+    const readHash=await sha256Hex('query-synthetic-read-key'),writeHash=await sha256Hex('query-synthetic-write-key');
+    await actor(a);const readId=(await one("select public.al_issue_api_key($1,'Query read','al_live_0123abcd',$2,array['envelopes:read']) id",[oa,readHash])).id;
+    await db.query("select public.al_issue_api_key($1,'Query write','al_live_0123abce',$2,array['envelopes:write'])",[oa,writeHash]);
+    await service();const keyed=(await one('select public.al_query_envelopes(null,$1,$2,$3) data',[readHash,ob,{query:'literal %_'}])).data;assert.equal(keyed.items.length,3);assert.ok(keyed.items.every((e:any)=>e.organization_id===oa));await assert.rejects(db.query('select public.al_query_envelopes(null,$1,null)',[writeHash]),/SCOPE_DENIED/);
+    await actor(a);await db.query('select public.al_revoke_api_key($1,$2)',[oa,readId]);await service();await assert.rejects(db.query('select public.al_query_envelopes(null,$1,null)',[readHash]),/INVALID_API_KEY/);
+    const {queryRoute}=await import('../supabase/functions/avtalslank-api/query.ts');
+    const client:any={rpc:async(_name:string,args:any)=>({data:(await one('select public.al_query_envelopes($1,$2,$3,$4) data',[args.p_actor,args.p_key_hash,args.p_org,args.p_filters])).data,error:null})};
+    const response=await queryRoute(new Request('https://avtalslank.test/v1/envelopes?query=literal&limit=2'),'/v1/envelopes',client,{actor:a,keyHash:null,organizationId:oa});assert.ok(response);assert.equal(response.data.length,2);assert.ok(response.page.nextCursor);
+  });
   await db.close();
 });

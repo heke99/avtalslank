@@ -73,7 +73,7 @@ export function signingReadiness(
   for (const method of new Set(recipients.map((r) => r.method)))
     if (!capabilities.find((c) => c.method === method)?.enabled)
       issues.push(
-        `${methodLabels[method]} är inte aktiverat för skarpa utskick.`,
+        `${methodLabels[method]} är inte tillgängligt för ditt företag.`,
       );
   return issues;
 }

@@ -382,6 +382,7 @@ export function WorkspaceOperations({
   reload: () => Promise<void>;
 }) {
   const [tab, setTab] = useState("contacts"),
+    [activitySearch,setActivitySearch]=useState(""),
     [contacts, setContacts] = useState<Contact[]>([]),
     [members, setMembers] = useState<Member[]>([]),
     [events, setEvents] = useState<Activity[]>([]),
@@ -430,6 +431,7 @@ export function WorkspaceOperations({
     });
     setEvents(more ? [...events, ...data] : data);
   }
+  const visibleEvents=events.filter(e=>(activityLabel(e.kind)+' '+e.kind).toLocaleLowerCase('sv').includes(activitySearch.trim().toLocaleLowerCase('sv')));
   return (
     <section className="operations">
       <div className="section-heading">
@@ -718,6 +720,8 @@ export function WorkspaceOperations({
       )}
       {tab === "activity" && (
         <>
+          <label>Sök i visade händelser<input value={activitySearch} onChange={e=>setActivitySearch(e.target.value)} type="search"/></label>
+          <p className="muted">{visibleEvents.length} av {events.length} inlästa händelser matchar. Läs in äldre händelser för att utöka urvalet.</p>
           <div className="operation-tools">
             <button
               className="secondary"
@@ -728,20 +732,20 @@ export function WorkspaceOperations({
             </button>
             <button
               className="secondary"
-              disabled={!events.length}
+              disabled={!visibleEvents.length}
               onClick={() =>
                 downloadJson("avtalslank-aktivitet.json", {
                   organizationId: orgId,
                   exportedAt: new Date().toISOString(),
                   scope: "Visade händelser, inte hela historiken",
-                  events,
+                  events:visibleEvents,
                 })
               }
             >
               Exportera visade händelser
             </button>
           </div>
-          {events.map((e) => (
+          {visibleEvents.map((e) => (
             <div className="list-row" key={e.id}>
               <strong className="grow">{activityLabel(e.kind)}</strong>
               <time>
@@ -751,6 +755,7 @@ export function WorkspaceOperations({
               </time>
             </div>
           ))}
+          {events.length>0&&visibleEvents.length===0&&<p role="status">Inga visade händelser matchar sökningen.</p>}
           {events.length > 0 && (
             <button
               className="secondary"

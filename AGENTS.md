@@ -17,3 +17,5 @@ Active account/operations iteration: docs/work/account-operations.md. Preserve e
 Public entry and launch scope: docs/work/public-launch.md. Planned Start/Team/API choices are user-declared interest only. Never derive billing, quotas or permissions from signup metadata. Public DPA information is not a concluded processor agreement; live document processing retains its launch gates.
 
 Active register/UI and workspace iteration: docs/work/register-and-workspace.md. CSV exports only the visible current-organization subset and neutralizes formula-like cells. MFA recovery targets unfinished app factors only; server Auth remains authoritative.
+
+Current production UX/API work: docs/work/production-ux-api.md. Customer pages omit internal build/launch language. This never enables unverified signing/payment capabilities. Cursor/filter parameters never authorize tenant access; query RPC remains service-only behind verified Edge identity.

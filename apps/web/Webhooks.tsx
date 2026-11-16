@@ -1,5 +1,6 @@
+import {requestJson} from "../../packages/http/src/index";
 import React, { useEffect, useState } from "react";
-import { apiUrl, supabase, friendlyError } from "./client";
+import { apiUrl, supabase, friendlyError,displayError } from "./client";
 export default function Webhooks({ orgId }: { orgId: string }) {
   const [items, setItems] = useState<any[]>([]),
     [busy, setBusy] = useState(false),
@@ -17,14 +18,14 @@ export default function Webhooks({ orgId }: { orgId: string }) {
   useEffect(() => {
     setSecret("");
     setItems([]);
-    load().catch((e) => setError(friendlyError(e.message)));
+    load().catch((e) => setError(displayError(e)));
   }, [orgId]);
   async function save(body: unknown) {
     setBusy(true);
     setError("");
     try {
       const { data } = await supabase.auth.getSession();
-      const r = await fetch(apiUrl + "/v1/webhooks", {
+      const result = await requestJson(apiUrl + "/v1/webhooks", {
         method: "POST",
         headers: {
           authorization: `Bearer ${data.session?.access_token}`,
@@ -32,12 +33,10 @@ export default function Webhooks({ orgId }: { orgId: string }) {
         },
         body: JSON.stringify({ ...(body as object), organizationId: orgId }),
       });
-      const result = await r.json();
-      if (!r.ok) throw Error(result.error?.code);
       if (result.data.secret) setSecret(result.data.secret);
       await load();
     } catch (e) {
-      setError(friendlyError((e as Error).message));
+      setError(displayError(e));
     } finally {
       setBusy(false);
     }

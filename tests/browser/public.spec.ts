@@ -7,7 +7,7 @@ test('public hero, plans and legal navigation with no optional tracking or stora
     await page.goto('/');
     await expect(page.locator('#public-main')).toHaveCSS('margin-left','0px');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Avtal, dokument\s*och mottagare\./);
-    await expect(page.getByText('Konton och utkast är öppna.', { exact: true })).toBeVisible();
+    await expect(page.getByText('En tjänst från Trafexa Nordic AB.', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Skapa ditt företagskonto' })).toHaveAttribute('href', '/signup');
     await page.getByRole('button', { name: 'Cookieinställningar', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Inte i bruk');
@@ -21,7 +21,7 @@ test('public hero, plans and legal navigation with no optional tracking or stora
     await page.screenshot({ path: '.verification/public-home-desktop.png', fullPage: true });
     await page.getByRole('link', { name: 'Jämför abonnemangen' }).click();
     await expect(page.getByRole('heading', { name: 'Välj upplägg för dina avtal' })).toBeVisible();
-    await expect(page.getByText('Inte fastställt. Inga köp eller debiteringar är öppna.')).toBeVisible();
+    await expect(page.getByText('Pris och omfattning enligt separat offert.')).toBeVisible();
     await page.getByRole('link', { name: 'Välj Team', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Skapa konto', exact: true })).toBeVisible();
     await expect(page.getByLabel('Önskat upplägg', { exact: true })).toHaveValue('team');
@@ -40,7 +40,7 @@ test('signup requires terms, carries only declared plan metadata, and creates no
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Skapa konto', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Kontrollera din inkorg');
-    expect(payload.data).toEqual({ account_terms_version: '2026-11-16', account_terms_accepted: true, plan_interest: 'api' });
+    expect(payload.data).toEqual({ account_terms_version: '2026-11-16.2', account_terms_accepted: true, plan_interest: 'api' });
     expect(commerce).toEqual([]);
     await page.goto('/signup?plan=owner');
     await expect(page.getByLabel('Önskat upplägg', { exact: true })).toHaveValue('');
@@ -75,4 +75,12 @@ test('guided product tour supports keyboard steps without requests or pretending
 });
 test('API examples switch language and copy the selected server example',async({page,context})=>{
  await context.grantPermissions(['clipboard-read','clipboard-write']);await page.goto('/api');await page.getByLabel('Språk för API-exempel').selectOption('javascript');await expect(page.locator('.api-examples pre')).toContainText('process.env.AVTALSLANK_API_KEY');await page.getByRole('button',{name:'Kopiera API-exempel'}).click();await expect(page.getByRole('status')).toHaveText('Exemplet har kopierats.');expect(await page.evaluate(()=>navigator.clipboard.readText())).toContain('process.env.AVTALSLANK_API_KEY');await page.getByLabel('Språk för API-exempel').selectOption('python');await expect(page.locator('.api-examples pre')).toContainText('urllib.request');
+});
+test('customer pages omit build-stage wording and preserve archived policy versions',async({page})=>{
+ for(const path of ['/','/produkt','/abonnemang','/api','/sakerhet','/integritet','/villkor','/dataskydd']){await page.goto(path);await expect(page.locator('body')).not.toContainText(/skarpa utskick|skarp signering|inför lansering/i);}
+ await page.goto('/villkor');await expect(page.getByText('Version 2026-11-16.2',{exact:false})).toBeVisible();await expect(page.getByRole('link',{name:'Tidigare version'})).toHaveAttribute('href','/legal/2026-11-16/villkor.html');
+});
+test('account startup presents recovery when session refresh cannot finish',async({page})=>{
+ await page.addInitScript(()=>localStorage.setItem('sb-ykddnagtuacflilbchwx-auth-token',JSON.stringify({access_token:'expired-synthetic-token',refresh_token:'synthetic-refresh',token_type:'bearer',expires_at:1,user:{id:'11111111-1111-4111-8111-111111111111',email:'test@example.invalid',aud:'authenticated',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-01-01T00:00:00Z'}})));
+ await page.route('**/auth/v1/token**',()=>new Promise(()=>{}));await page.goto('/login');await expect(page.getByRole('heading',{name:'Inloggningen kunde inte läsas in'})).toBeVisible({timeout:18000});await expect(page.getByRole('button',{name:'Försök igen',exact:true})).toBeEnabled();
 });
