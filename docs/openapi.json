@@ -1,0 +1,266 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Avtalsl\u00e4nk API",
+    "version": "0.1.0",
+    "description": "Draft/preparation foundation. Production signing, document API upload, full template API and payment checkout are not enabled."
+  },
+  "servers": [
+    {
+      "url": "https://ykddnagtuacflilbchwx.supabase.co/functions/v1/avtalslank-api"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Avtalsl\u00e4nk scoped API key or Supabase user access token; API keys derive organization server-side."
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health without user data",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service responds"
+          }
+        }
+      }
+    },
+    "/v1/methods": {
+      "get": {
+        "summary": "Report methods and actual activation state",
+        "responses": {
+          "200": {
+            "description": "Capabilities; false is not production-ready"
+          }
+        }
+      }
+    },
+    "/v1/envelopes": {
+      "get": {
+        "summary": "List up to 100 organization-bound envelopes",
+        "responses": {
+          "200": {
+            "description": "Envelope list"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create an idempotent draft",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 120
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "draft"
+                ],
+                "properties": {
+                  "draft": {
+                    "type": "object",
+                    "required": [
+                      "title"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 160
+                      },
+                      "message": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "sequential": {
+                        "type": "boolean"
+                      },
+                      "expiresDays": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 90
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created or previous idempotent result"
+          },
+          "409": {
+            "description": "Idempotency conflict"
+          }
+        }
+      }
+    },
+    "/v1/billing": {
+      "get": {
+        "summary": "Read the unconfigured payment model; no charges",
+        "responses": {
+          "200": {
+            "description": "Billing configuration"
+          }
+        }
+      }
+    },
+    "/v1/api-keys": {
+      "post": {
+        "summary": "Create scoped API key using an authenticated owner/admin session",
+        "responses": {
+          "201": {
+            "description": "Secret returned once"
+          },
+          "403": {
+            "description": "Admin required"
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Read an organization-bound envelope",
+        "responses": {
+          "200": {
+            "description": "Result"
+          },
+          "400": {
+            "description": "Validation/readiness failure"
+          },
+          "403": {
+            "description": "Denied"
+          },
+          "422": {
+            "description": "Delivery/provider not configured"
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/recipients": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Add a draft recipient with selected signing method",
+        "responses": {
+          "200": {
+            "description": "Result"
+          },
+          "400": {
+            "description": "Validation/readiness failure"
+          },
+          "403": {
+            "description": "Denied"
+          },
+          "422": {
+            "description": "Delivery/provider not configured"
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/send": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Request signing; returns readiness blocker until qualified",
+        "responses": {
+          "200": {
+            "description": "Result"
+          },
+          "400": {
+            "description": "Validation/readiness failure"
+          },
+          "403": {
+            "description": "Denied"
+          },
+          "422": {
+            "description": "Delivery/provider not configured"
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/cancel": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Cancel a draft idempotently",
+        "responses": {
+          "200": {
+            "description": "Result"
+          },
+          "400": {
+            "description": "Validation/readiness failure"
+          },
+          "403": {
+            "description": "Denied"
+          },
+          "422": {
+            "description": "Delivery/provider not configured"
+          }
+        }
+      }
+    }
+  }
+}

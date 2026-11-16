@@ -1,0 +1,32 @@
+name: Verify Avtalslank
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      VITE_SUPABASE_URL: https://ykddnagtuacflilbchwx.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: ui-network-double-no-real-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/avtalslank-vite.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:5173/ > /dev/null && break; sleep 1; done
+          npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          include-hidden-files: true
+          name: browser-verification
+          path: |
+            .verification/
+            test-results/

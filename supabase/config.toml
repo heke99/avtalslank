@@ -1,0 +1,5 @@
+project_id = "avtalslank"
+
+[functions.avtalslank-api]
+verify_jwt = false
+# The function authenticates Supabase user JWTs and scoped customer API keys itself.

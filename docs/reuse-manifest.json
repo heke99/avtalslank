@@ -1,0 +1,209 @@
+{
+  "authorization": {
+    "basis": "User explicitly instructed porting code from their projects into standalone Avtalslank under Trafexa Nordic AB on 2026-11-16.",
+    "scope": "Original project code only. No DocuSeal ports are included in this foundation; their separate rights remain unverified."
+  },
+  "files": [
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/crypto/src/base64.ts",
+      "destination": "packages/crypto/src/base64.ts",
+      "sourceSha256": "7d2981646735cb79dab64eaec9023dee93dd6b6be534fa1e6d4325e869808bd5",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "7d2981646735cb79dab64eaec9023dee93dd6b6be534fa1e6d4325e869808bd5"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/crypto/src/key-rotation.ts",
+      "destination": "packages/crypto/src/key-rotation.ts",
+      "sourceSha256": "6c26143c7d42d228c3182d7858762c735e591adcf76273948a576dca57291638",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "6c26143c7d42d228c3182d7858762c735e591adcf76273948a576dca57291638"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/crypto/src/hmac.ts",
+      "destination": "packages/crypto/src/hmac.ts",
+      "sourceSha256": "e9bc6a420d57fcc5e9dd98f66079c67d2095bf6dc763866955f19d5845aea019",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming.",
+        "Copy byte views into explicit ArrayBuffer-backed Uint8Array for TypeScript 5.9 WebCrypto and Blob compatibility."
+      ],
+      "destinationSha256": "ade30660487c01cc6d8337f550c69d5e0d41538a1496d50cdb16743464acd53a"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/crypto/src/canonical-json.ts",
+      "destination": "packages/crypto/src/canonical-json.ts",
+      "sourceSha256": "895ff6ca86cd93347fba93d737eebbf9c38fe1d41b693d496ea3af6d4e9816ed",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "895ff6ca86cd93347fba93d737eebbf9c38fe1d41b693d496ea3af6d4e9816ed"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/crypto/src/tokens.ts",
+      "destination": "packages/crypto/src/tokens.ts",
+      "sourceSha256": "9338ed6385e8a6e1dfde458f97b99af931e7fbb8dabeef2cf0eb27ef975c6e15",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "9338ed6385e8a6e1dfde458f97b99af931e7fbb8dabeef2cf0eb27ef975c6e15"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/crypto/src/hash.ts",
+      "destination": "packages/crypto/src/hash.ts",
+      "sourceSha256": "87e600f7d6a42d73ff60a63224549cc5fd68a071fd677f9fdef0c027630046f3",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming.",
+        "Copy byte views into explicit ArrayBuffer-backed Uint8Array for TypeScript 5.9 WebCrypto and Blob compatibility."
+      ],
+      "destinationSha256": "4bc2200cd0b0955fa40bbf4e724b6b5309bde7c0eb10af5077616de9ce70084e"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/contracts/src/signature-case-detail.ts",
+      "destination": "packages/contracts/src/signature-case-detail.ts",
+      "sourceSha256": "64e2b63c6aeb64f2137d7d4691683d99af2d3687eaa132eefd536441a4f53ad1",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "acd16c0b654f5813b1931cb49d570848e90589e1c584468e554460f1d2f0516f"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/contracts/src/index.ts",
+      "destination": "packages/contracts/src/index.ts",
+      "sourceSha256": "315c857431dc16b729364e2e1fb0f4e772eb884cf2a8f7285f344728d96f70a3",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "7b6c9ce0ba0d501da27643b5b4150531ee6b864ffa1541db15cd13f47353fc93"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/validation-client/src/index.ts",
+      "destination": "packages/validation-client/src/index.ts",
+      "sourceSha256": "7ee0a8815fce4f690828a5c2f8c20cb0b60116de87f4d381d3a2c006bccac9c0",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "79c0bed5e438c4294d02b4faa92814658e890a5f86ffb7c47704c1557089a78f"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/evidence/src/zip.ts",
+      "destination": "packages/evidence/src/zip.ts",
+      "sourceSha256": "dc58d63fd2ba5b11652855f84cfb9e3a2639111f4a2e7a8eee201c12985ae915",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming.",
+        "Standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "bf0410949e66c3cb7314c72d1121df03ac5d9ec996b41140c7976fffafbd5d43"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/evidence/src/index.ts",
+      "destination": "packages/evidence/src/index.ts",
+      "sourceSha256": "e850eaf8e9c5c188d83d61c67310319ed085644e13ea0bfef241324ba05075f7",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming.",
+        "Standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "1aba39075038a4d7ce1c9000640475a2dd44b82e72e117e13d9dfd79ee519598"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/webhooks/src/index.ts",
+      "destination": "packages/webhooks/src/index.ts",
+      "sourceSha256": "fd8610b362afb12bd22408afcc357af11ca079ef760df41ddf2a1cbbe49560a7",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "6c7d7425249f924ba098807f052f416e1ec0a970c7fb771d4d32d6f46d74b0ba"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/provider-adapters/src/tic-bankid.ts",
+      "destination": "packages/provider-adapters/src/tic-bankid.ts",
+      "sourceSha256": "89f411a2b2fab25819635106776df181e92bf17f1e0bb9d74ce51adf6d003627",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "60681c369cf29f9f24d7b992294818132ce9182ae975bcb13e1e020968184ce3"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/provider-adapters/src/freja.ts",
+      "destination": "packages/provider-adapters/src/freja.ts",
+      "sourceSha256": "5b1964b69bc4ad6c8417a066404ebec926a356bbc210a9cdb8b7e9af5b74380a",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "cbefd5a3cd726a2c9c99dadd8c8371da3579ba3bd22ad56e54d170945c396d44"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/provider-adapters/src/evidence-payload.ts",
+      "destination": "packages/provider-adapters/src/evidence-payload.ts",
+      "sourceSha256": "a6b02200a2b29d38dd3c4d4fbc6a1006a11c5feb09507738aa9d46048fc76e7d",
+      "adaptations": [
+        "Relative TypeScript import extensions for shared Deno/Node build; standalone Avtalslank evidence schema naming."
+      ],
+      "destinationSha256": "2615edfc4173e164b12ec1f80b6a5a721929d6c5fd89af5fdd88f2e4c94b51c9"
+    },
+    {
+      "repository": "heke99/kundexa",
+      "commit": "70edd1fd22c6c76884cd65b4efdd1b2474cd459f",
+      "source": "src/lib/signing/signature-viewport.ts",
+      "destination": "packages/documents/src/signature-viewport.ts",
+      "sourceSha256": "fcdff3084e39f7c044854c5a02e66a10945e3eaabd16731c601a4edd9635ab48",
+      "adaptations": [],
+      "destinationSha256": "fcdff3084e39f7c044854c5a02e66a10945e3eaabd16731c601a4edd9635ab48"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/document-processing/src/index.ts",
+      "destination": "packages/document-processing/src/index.ts",
+      "sourceSha256": "ec88f6e740e7bc2ec0f795c3b23141d4a104d583031944984c8de33cbf9fef28",
+      "adaptations": [
+        "Relative imports changed to TypeScript extensions."
+      ],
+      "destinationSha256": "76a887a135eb7e217cced0d983840b1b0dc2818a5c8f6317541d4869932f15dd"
+    },
+    {
+      "repository": "heke99/kommunsign",
+      "commit": "0cb37dd0c8d20598883acb3098c3e440abf56cd6",
+      "source": "packages/document-processing/src/production.ts",
+      "destination": "packages/document-processing/src/production.ts",
+      "sourceSha256": "07ef1c9846b9de057a382ebd3b4ffc16b93323f67a9ba910b1b6948a0a64888c",
+      "adaptations": [
+        "Relative imports changed to TypeScript extensions.",
+        "Copy byte views into explicit ArrayBuffer-backed Uint8Array for TypeScript 5.9 WebCrypto and Blob compatibility."
+      ],
+      "destinationSha256": "08301297dd245286b9530e1f8dfb43339b606dc06ed9726c7b3b99336db7a9c8"
+    }
+  ]
+}

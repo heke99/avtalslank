@@ -1,0 +1,37 @@
+{
+  "name": "avtalslank",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "verify": "npm run verify:provenance && npm run typecheck:edge && npm run test && npm run build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test:browser": "playwright test",
+    "worker": "node --import tsx apps/worker/index.ts",
+    "verify:provenance": "node scripts/check-provenance.mjs",
+    "typecheck:edge": "tsc --noEmit --strict --target ES2022 --lib ES2023,DOM --module ESNext --moduleResolution Bundler --allowImportingTsExtensions --skipLibCheck tests/edge-runtime.d.ts supabase/functions/avtalslank-api/index.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.110.7",
+    "lucide-react": "0.468.0",
+    "pdf-lib": "1.17.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "@playwright/test": "1.58.2",
+    "@types/node": "22.15.3",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "supabase": "2.109.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.1"
+  }
+}
