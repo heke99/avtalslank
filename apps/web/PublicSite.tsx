@@ -1,6 +1,6 @@
 import {ProductGuide,MethodOverview,ApiExamples} from "./ProductGuide";
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, ArrowUpRight, Check, FileText, Link2, Menu, X } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Menu, X } from 'lucide-react';
 import { plans, legalVersion, pageTitles } from '../../packages/public-site/src/index';
 import { LegalContent } from './LegalContent';
 export function PublicFooter({ onCookies }: {
@@ -36,9 +36,8 @@ function PageIntro({ path, text }: {
     text?: string;
 }) { return <section className="public-page-intro"><p className="public-kicker">AVTALSLÄNK</p><h1>{pageTitles[path]}</h1>{text && <p className="public-lead">{text}</p>}</section>; }
 function PlanSection({standalone=false}:{standalone?:boolean}){
- return <section className="register-plans">{!standalone&&<div className="register-section-label"><span>03 / UPPLÄGG</span><h2>Utgå från hur ni arbetar.</h2><a href="/abonnemang">Jämför abonnemangen →</a></div>}<p className="register-plan-note">Planerade abonnemang. Priser, volymer och betalningsmodell är inte fastställda.</p><ol>{plans.map((p,i)=><li key={p.id}><span className="register-plan-number">0{i+1}</span><div><h3>{p.name}</h3><p>{p.audience}</p></div><div><p>{p.description}</p><ul>{p.features.map(f=><li key={f}>{f}</li>)}</ul></div><div className="register-plan-action"><strong>Pris inför lansering</strong><a href={'/signup?plan='+p.id}>Välj {p.name} ↗</a><small>Önskat upplägg, inget köp.</small></div></li>)}</ol><p className="register-plan-note">Priser publiceras inför betalstart. Inga debiteringar sker nu. Ett planval startar inget abonnemang.</p></section>;
+ return <section className="register-plans">{!standalone&&<div className="register-section-label"><span>03 / UPPLÄGG</span><h2>Utgå från hur ni arbetar.</h2><a href="/abonnemang">Jämför abonnemangen →</a></div>}<p className="register-plan-note">Planerade abonnemang. Priser, volymer och betalningsmodell är inte fastställda.</p><ol>{plans.map((p,i)=><li key={p.id}><span className="register-plan-number">0{i+1}</span><div><h3>{p.name}</h3><p>{p.audience}</p></div><div><p>{p.description}</p><ul>{p.features.map(f=><li key={f}>{f}</li>)}</ul></div><div className="register-plan-action"><strong>Pris inför lansering</strong><a aria-label={'Välj '+p.name} href={'/signup?plan='+p.id}>Välj {p.name} <span aria-hidden="true">↗</span></a><small>Önskat upplägg, inget köp.</small></div></li>)}</ol><p className="register-plan-note">Priser publiceras inför betalstart. Inga debiteringar sker nu. Ett planval startar inget abonnemang.</p></section>;
 }
-function Workflow() { return <section className="public-section public-workflow">{[['01', 'Förbered dokumentet', 'Ladda upp PDF, lägg till uppgifter och återanvänd en sparad mall.'], ['02', 'Ange rätt mottagare', 'Välj personer, ordning och önskat signeringssätt innan utskick.'], ['03', 'Följ nästa steg', 'Se status och händelser i arbetsytan. Skarp signering öppnas efter verifierad anslutning.']].map(([n, h, p]) => <article key={n}><span>{n}</span><h3>{h}</h3><p>{p}</p></article>)}</section>; }
 function Faq() {
     return <section className="public-section public-faq"><div><p className="public-kicker">VANLIGA FRÅGOR</p><h2>Innan du börjar.</h2><a href="/hjalp">Fråga oss →</a></div><div>{[
             ['Kostar det att skapa konto?', 'Registrering startar inget betalt abonnemang. Priser, inkluderade volymer och avtalsperioder visas och godkänns separat innan betalning öppnas.'],

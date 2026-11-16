@@ -22,3 +22,7 @@ MFA API behavior verified against current Supabase JavaScript unenroll reference
 References checked: https://supabase.com/changelog.md and https://supabase.com/docs/reference/javascript/auth-mfa-unenroll. CLI stays pinned v2; no schema CLI operation is involved.
 
 Verification in progress. Local suite expanded from 65 to 70 code/database tests. CI will exercise existing account/signing flows plus tour, API copy, onboarding/filter/export and unfinished-MFA recovery. Public page prerendering, static API/sitemap, existing provider gates and necessary-only storage remain unchanged. Do not describe local or mocked tests as live signing/email/identity-provider proof.
+
+First CI 43908072595: 70 code/database tests, build and worker-container passed. 22/23 browser scenarios passed, including all new functional scenarios. The remaining existing plan-to-signup scenario expected the visible link name without its decorative arrow. Added an explicit accessible plan-link name and hidden decorative arrow. Responsive agreement controls now wrap independently of desktop panel layout; the export scenario also verifies the mobile page width and captures a screenshot. Removed the unused old three-column workflow function. Final rerun pending.
+
+Live visual inspection: the published home now uses a full-width register heading, service facts and ruled sections; no mock document, italic slogan or three-card subscription block. The live tour correctly switches to recipient preparation without sending/saving. Public page was left available for review.

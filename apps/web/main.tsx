@@ -451,7 +451,7 @@ function App() {
                 </>
               )}
               {["overview", "agreements"].includes(view) && (
-                <section className="panel">
+                <section className="panel agreements-panel">
                   <div className="panel-header">
                     <div>
                       <h2>
