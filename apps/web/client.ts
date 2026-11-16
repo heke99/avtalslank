@@ -17,6 +17,15 @@ export const apiUrl =
   import.meta.env.VITE_API_URL || `${url}/functions/v1/avtalslank-api`;
 export const friendlyError = (message: string) =>
   ({
+    KEY_NOT_ACTIVE: "Nyckeln är utgången eller återkallad. Skapa en ny nyckel.",
+    INVALID_KEY_EXPIRY: "Välj en giltighetstid mellan 1 och 365 dagar eller utan slutdatum.",
+    INVALID_KEY: "Ange ett nyckelnamn och minst en giltig behörighet.",
+    EMAIL_VERIFICATION_REQUIRED: "Verifiera din e-postadress innan du accepterar villkoren.",
+    LEGAL_VERSION_CHANGED: "Villkoren har uppdaterats. Läs in sidan igen och granska den aktuella versionen.",
+    TERMS_REQUIRED: "Markera att du accepterar kontovillkoren.",
+    WEBHOOK_MUST_BE_DISABLED: "Stäng av anslutningen innan du byter hemlighet.",
+    WEBHOOK_DELIVERIES_PENDING: "Det finns pågående eller osäkra leveranser. Stäm av dem innan du byter hemlighet.",
+    INVALID_PLAN: "Välj ett av de tillgängliga uppläggen.",
     INVALID_INVITATION: "Inbjudan är ogiltig, utgången eller gäller en annan verifierad e-postadress.",
     ALREADY_MEMBER: "Personen är redan medlem i företaget.",
     LAST_OWNER: "Utse en annan ägare innan du lämnar företaget.",
@@ -36,7 +45,7 @@ export const friendlyError = (message: string) =>
     PDF_PAGE_LIMIT: "Dokumentet har fler sidor än vad som tillåts.",
     ACCESS_DENIED: "Du saknar behörighet till företaget.",
     ADMIN_REQUIRED: "Endast ägare och administratör får göra detta.",
-    VERSION_CONFLICT: "Utkastet har ändrats. Öppna det igen innan du sparar.",
+    VERSION_CONFLICT: "Uppgifterna har ändrats. Hämta den senaste versionen innan du sparar.",
     DOCUMENT_SCAN_REQUIRED: "Dokumentkontrollen är inte klar ännu.",
     SIGNING_METHOD_NOT_READY:
       "Metoden är inte tillgänglig för ditt företag. Välj en annan metod eller kontakta support.",

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Avtalslänk API",
-    "version": "0.5.0",
-    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled."
+    "version": "0.6.0",
+    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled. User-only account controls register versioned terms acceptance, commercial plan interest (no billing), bounded API-key lifecycle and disabled-webhook secret rotation. API-key expiry is checked before cached responses. New credential secrets are returned only once; mutations are never automatically retried."
   },
   "servers": [
     {
@@ -1834,6 +1834,140 @@
                 "type": "object"
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/account/legal": {
+      "get": {
+        "summary": "Read current account terms and own acceptance history",
+        "description": "Verified user JWT only; no organizationId required. Returns document.version/sha256/url, accepted/acceptedAt and own history. Never accepts automatically.",
+        "responses": {
+          "200": {
+            "description": "Successful response in data envelope"
+          },
+          "400": {
+            "description": "Invalid request or state conflict"
+          },
+          "401": {
+            "description": "Verified user token required"
+          },
+          "403": {
+            "description": "Organization membership or administrator permission required"
+          }
+        }
+      },
+      "post": {
+        "summary": "Explicitly accept the current account terms",
+        "description": "Body: accepted:true, version and sha256 matching GET. Confirmed email required. Server derives user identity and timestamp. Same version is idempotent; changed hash/version rejected. Does not start billing.",
+        "responses": {
+          "200": {
+            "description": "Successful response in data envelope"
+          },
+          "400": {
+            "description": "Invalid request or state conflict"
+          },
+          "401": {
+            "description": "Verified user token required"
+          },
+          "403": {
+            "description": "Organization membership or administrator permission required"
+          }
+        }
+      }
+    },
+    "/v1/plan-preference": {
+      "get": {
+        "summary": "Read company plan interest",
+        "description": "organizationId query parameter, active member required. Returns plan, revision, canManage and updatedAt.",
+        "responses": {
+          "200": {
+            "description": "Successful response in data envelope"
+          },
+          "400": {
+            "description": "Invalid request or state conflict"
+          },
+          "401": {
+            "description": "Verified user token required"
+          },
+          "403": {
+            "description": "Organization membership or administrator permission required"
+          }
+        }
+      },
+      "post": {
+        "summary": "Save plan interest without activating payment",
+        "description": "Body: organizationId, plan:null|start|team|api, revision from GET (0 initially). Owner/admin only. Revision mismatch VERSION_CONFLICT. No subscription, quota or permission changes.",
+        "responses": {
+          "200": {
+            "description": "Successful response in data envelope"
+          },
+          "400": {
+            "description": "Invalid request or state conflict"
+          },
+          "401": {
+            "description": "Verified user token required"
+          },
+          "403": {
+            "description": "Organization membership or administrator permission required"
+          }
+        }
+      }
+    },
+    "/v1/security/keys": {
+      "get": {
+        "summary": "List API-key metadata",
+        "description": "organizationId query; owner/admin only. At most 200 newest records: id,name,prefix,scopes,expires_at,last_used_at,revoked_at,created_at. Hash and plaintext never returned.",
+        "responses": {
+          "200": {
+            "description": "Successful response in data envelope"
+          },
+          "400": {
+            "description": "Invalid request or state conflict"
+          },
+          "401": {
+            "description": "Verified user token required"
+          },
+          "403": {
+            "description": "Organization membership or administrator permission required"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create, rotate or revoke all company keys",
+        "description": "Body: organizationId, action:create|rotate|revoke_all. Create also needs name(2..80), scopes (1..5 of envelopes:read/write,templates:read/write,billing:read), optional expiryDays integer0..365 (0 no expiry). Rotate needs id; inherits existing name/scopes/expiry, atomically revokes old key. Create/rotate returns key once only. Revoke_all affects all company keys, including rows beyond the list limit. Expired/revoked keys are rejected before idempotency cache replay. last_used_at updates at most once/minute on successful calls. No automatic POST retry; after unknown response inspect list and revoke/recreate if secret was lost.",
+        "responses": {
+          "200": {
+            "description": "Successful response in data envelope"
+          },
+          "400": {
+            "description": "Invalid request or state conflict"
+          },
+          "401": {
+            "description": "Verified user token required"
+          },
+          "403": {
+            "description": "Organization membership or administrator permission required"
+          }
+        }
+      }
+    },
+    "/v1/security/webhook-rotate": {
+      "post": {
+        "summary": "Rotate a disabled webhook secret",
+        "description": "Body: organizationId,id. Owner/admin JWT required. Endpoint must be disabled and have no pending/running/reconcile webhook deliveries. Returns new secret once; endpoint stays disabled. Update recipient secret before reactivation. No force or automatic retry.",
+        "responses": {
+          "200": {
+            "description": "Successful response in data envelope"
+          },
+          "400": {
+            "description": "Invalid request or state conflict"
+          },
+          "401": {
+            "description": "Verified user token required"
+          },
+          "403": {
+            "description": "Organization membership or administrator permission required"
           }
         }
       }

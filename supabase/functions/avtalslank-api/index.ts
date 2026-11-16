@@ -1,3 +1,4 @@
+import {securityRoute} from "./security.ts";
 import {queryRoute} from "./query.ts";
 import {operationsRoute} from "./operations.ts";
 import { connectedRoute, publicSigning, boundedBytes } from "./connected.ts";
@@ -47,6 +48,7 @@ const safeCodes = new Set([
   "INVALID_INVITATION", "INVITATION_NOT_FOUND", "INVITATION_LIMIT", "ALREADY_MEMBER", "LAST_OWNER", "OWNER_REQUIRED", "RECIPIENT_NOT_PENDING", "DELIVERY_PENDING", "DELIVERY_RECONCILIATION_REQUIRED", "REMINDER_LIMIT", "REMINDER_COOLDOWN",
   "MFA_REQUIRED",
   "INVALID_QUERY", "INVALID_CURSOR",
+  "KEY_NOT_ACTIVE", "INVALID_KEY_EXPIRY", "INVALID_PLAN", "EMAIL_VERIFICATION_REQUIRED", "TERMS_REQUIRED", "LEGAL_VERSION_CHANGED", "WEBHOOK_MUST_BE_DISABLED", "WEBHOOK_DELIVERIES_PENDING",
   "INVALID_ID",
   "INVALID_BODY",
   "INVALID_FIELDS",
@@ -153,6 +155,8 @@ Deno.serve(async (req: Request) => {
       if (!body || Array.isArray(body) || typeof body !== "object")
         throw new Error("INVALID_BODY");
     }
+    const securityResult=await securityRoute(req,path,service,{actor:verifiedActor,keyHash:isApi?await sha256Hex(token):null,organizationId:isApi?null:(body.organizationId??new URL(req.url).searchParams.get('organizationId')) as string|null},body);
+    if(securityResult)return response(securityResult);
     const opResult=await operationsRoute(req,path,service,{actor:verifiedActor,keyHash:isApi?await sha256Hex(token):null,organizationId:isApi?null:(body.organizationId??new URL(req.url).searchParams.get('organizationId')) as string|null},body);
     if(opResult)return response(opResult);
     const connected = await connectedRoute(

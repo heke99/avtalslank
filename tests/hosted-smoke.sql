@@ -92,5 +92,27 @@ do $$declare o uuid:=current_setting('al.smoke_org_a')::uuid;v jsonb;begin
  begin perform public.al_query_envelopes('f8160002-0000-4000-8000-000000000002',null,o,'{}');raise exception 'QUERY_FOREIGN_ALLOWED';exception when others then if sqlerrm<>'ACCESS_DENIED' then raise;end if;end;
  begin perform public.al_query_envelopes('f8160001-0000-4000-8000-000000000001',null,o,'{"limit":101}');raise exception 'QUERY_LIMIT_ALLOWED';exception when others then if sqlerrm<>'INVALID_QUERY' then raise;end if;end;
 end $$;
+-- Account security: real server-role commands with synthetic, verified users only.
+do $$declare a uuid:='f8160001-0000-4000-8000-000000000001';b uuid:='f8160002-0000-4000-8000-000000000002';o uuid:=current_setting('al.smoke_org_a')::uuid;v jsonb;k jsonb;n jsonb;begin
+ v:=public.al_legal_account(a,'read');
+ if (v->>'accepted')::boolean then raise exception 'UNEXPECTED_ACCEPTANCE';end if;
+ v:=public.al_legal_account(a,'accept',(v->'document')||'{"accepted":true}');
+ if not (v->>'accepted')::boolean then raise exception 'ACCEPTANCE_MISSING';end if;
+ if jsonb_array_length(public.al_legal_account(b,'read')->'history')<>0 then raise exception 'LEGAL_HISTORY_LEAK';end if;
+ v:=public.al_plan_preference(a,o,true,'api',0);
+ if (v->>'revision')::int<>1 then raise exception 'PLAN_REVISION';end if;
+ begin perform public.al_plan_preference(a,o,true,'team',0);raise exception 'STALE_PLAN_ALLOWED';exception when others then if sqlerrm<>'VERSION_CONFLICT' then raise;end if;end;
+ k:=public.al_manage_keys(a,o,'create',jsonb_build_object('name','Smoke security key','prefix','al_live_f816abcd','tokenHash',repeat('c',64),'scopes',jsonb_build_array('envelopes:read'),'expiresAt',now()+interval '1 day'));
+ perform public.al_query_envelopes(null,repeat('c',64),null);
+ n:=public.al_manage_keys(a,o,'rotate',jsonb_build_object('id',k->>'id','prefix','al_live_f816abce','tokenHash',repeat('d',64)));
+ begin perform public.al_query_envelopes(null,repeat('c',64),null);raise exception 'OLD_KEY_ALLOWED';exception when others then if sqlerrm<>'INVALID_API_KEY' then raise;end if;end;
+ perform public.al_query_envelopes(null,repeat('d',64),null);
+ begin perform public.al_manage_keys(b,o,'list');raise exception 'FOREIGN_KEYS_ALLOWED';exception when others then if sqlerrm<>'ACCESS_DENIED' then raise;end if;end;
+ perform public.al_manage_keys(a,o,'revoke_all');
+ begin perform public.al_query_envelopes(null,repeat('d',64),null);raise exception 'REVOKED_KEY_ALLOWED';exception when others then if sqlerrm<>'INVALID_API_KEY' then raise;end if;end;
+ v:=public.al_configure_webhook(a,o,'https://example.com/avtalslank-smoke',repeat('a',64),null,false);
+ perform public.al_rotate_webhook(a,o,(v->>'id')::uuid,repeat('b',64));
+ if (select enabled from public.al_billing_accounts where organization_id=o) then raise exception 'BILLING_ACTIVATED';end if;
+end $$;
 reset role;
 rollback;

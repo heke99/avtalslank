@@ -1790,5 +1790,58 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     const client:any={rpc:async(_name:string,args:any)=>({data:(await one('select public.al_query_envelopes($1,$2,$3,$4) data',[args.p_actor,args.p_key_hash,args.p_org,args.p_filters])).data,error:null})};
     const response=await queryRoute(new Request('https://avtalslank.test/v1/envelopes?query=literal&limit=2'),'/v1/envelopes',client,{actor:a,keyHash:null,organizationId:oa});assert.ok(response);assert.equal(response.data.length,2);assert.ok(response.page.nextCursor);
   });
+  await t.test('key lifecycle preserves permissions and expiry, rejects expired keys, and rolls back failed rotation',async()=>{
+    await service();const manage=async(action:string,payload:any={},who=a,org=oa)=>(await one('select public.al_manage_keys($1,$2,$3,$4) data',[who,org,action,payload])).data;
+    const h=await sha256Hex('security-test-key'),h2=await sha256Hex('security-test-rotated');const expiry=new Date(Date.now()+86400000).toISOString();
+    const k=await manage('create',{name:'Security integration',prefix:'al_live_99887766',tokenHash:h,scopes:['envelopes:read'],expiresAt:expiry});
+    await assert.rejects(manage('list',{},b,oa),/ACCESS_DENIED/);await assert.rejects(manage('list',{},'33333333-3333-4333-8333-333333333333',oa),/ACCESS_DENIED|ADMIN_REQUIRED/);
+    const listed=await manage('list');assert.ok(listed.some((x:any)=>x.id===k.id));assert.ok(listed.every((x:any)=>!('token_hash' in x)));
+    await one('select public.al_query_envelopes(null,$1,null) data',[h]);await db.exec('reset role');assert.ok((await one('select last_used_at from public.al_api_keys where id=$1',[k.id])).last_used_at);await service();
+    await assert.rejects(manage('rotate',{id:k.id,prefix:'al_live_99887767',tokenHash:h}),/duplicate key/);
+    await one('select public.al_query_envelopes(null,$1,null) data',[h]);
+    const rotated=await manage('rotate',{id:k.id,prefix:'al_live_99887768',tokenHash:h2,scopes:['envelopes:write'],expiresAt:null});
+    await assert.rejects(one('select public.al_query_envelopes(null,$1,null) data',[h]),/INVALID_API_KEY/);await one('select public.al_query_envelopes(null,$1,null) data',[h2]);
+    await assert.rejects(manage('rotate',{id:k.id,prefix:'al_live_99887769',tokenHash:await sha256Hex('third')}),/KEY_NOT_ACTIVE/);
+    await db.exec('reset role');const row=await one('select scopes,expires_at from public.al_api_keys where id=$1',[rotated.id]);assert.deepEqual(row.scopes,['envelopes:read']);assert.equal(new Date(row.expires_at).toISOString(),expiry);
+    await db.query("update public.al_api_keys set expires_at=now()-interval '1 second' where id=$1",[rotated.id]);await service();
+    for(const sql of ['select public.al_query_envelopes(null,$1,null)','select public.al_api_dispatch($1,\'envelopes.list\',\'{}\',null)','select al_private.api_execute($1,\'envelopes.list\',\'{}\')'])await assert.rejects(db.query(sql,[h2]),/INVALID_API_KEY/);
+    await assert.rejects(manage('create',{name:'Expired',prefix:'al_live_99887770',tokenHash:await sha256Hex('expired'),scopes:['envelopes:read'],expiresAt:'2020-01-01T00:00:00Z'}),/INVALID_KEY_EXPIRY/);
+    const foreign=await manage('create',{name:'Other tenant',prefix:'al_live_99887771',tokenHash:await sha256Hex('foreign-security'),scopes:['envelopes:read']},b,ob);
+    assert.ok((await manage('revoke_all')).count>0);await db.exec('reset role');assert.equal((await one('select revoked_at from public.al_api_keys where id=$1',[foreign.id])).revoked_at,null);
+  });
+  await t.test('legal evidence matches the published snapshot, requires explicit verified acceptance and is immutable',async()=>{
+    await service();const legal=async(who:string,action='read',payload={})=>(await one('select public.al_legal_account($1,$2,$3) data',[who,action,payload])).data;
+    const before=await legal(a);assert.equal(before.accepted,false);assert.deepEqual(before.history,[]);
+    const html=await readFile(new URL('../public'+before.document.url,import.meta.url),'utf8');assert.equal(await sha256Hex(html),before.document.sha256);
+    await assert.rejects(legal(a,'accept',{...before.document,accepted:false}),/TERMS_REQUIRED/);
+    await assert.rejects(legal(a,'accept',{...before.document,accepted:true,sha256:'0'.repeat(64)}),/LEGAL_VERSION_CHANGED/);
+    const accepted=await legal(a,'accept',{...before.document,accepted:true});assert.equal(accepted.accepted,true);assert.ok(accepted.acceptedAt);assert.equal(accepted.history.length,1);
+    assert.equal((await legal(a,'accept',{...before.document,accepted:true})).acceptedAt,accepted.acceptedAt);assert.equal((await legal(b)).history.length,0);
+    await db.exec('reset role');await assert.rejects(db.query('update al_private.legal_acceptances set accepted_at=now() where user_id=$1',[a]),/IMMUTABLE_LEGAL_EVIDENCE/);await assert.rejects(db.query('delete from al_private.legal_documents'),/IMMUTABLE_LEGAL_EVIDENCE/);
+    await db.query('update auth.users set email_confirmed_at=null where id=$1',[b]);await service();await assert.rejects(legal(b,'accept',{...before.document,accepted:true}),/EMAIL_VERIFICATION_REQUIRED/);
+    await actor(a);await assert.rejects(db.query('select * from al_private.legal_acceptances'),/permission denied/);await assert.rejects(db.query("select public.al_legal_account($1,'read')",[b]),/permission denied/);
+  });
+  await t.test('plan interest uses optimistic revisions and never activates billing',async()=>{
+    await service();const pref=async(who:string,save=false,plan:string|null=null,revision:number|null=null)=>(await one('select public.al_plan_preference($1,$2,$3,$4,$5) data',[who,oa,save,plan,revision])).data;
+    const old=await pref(a);assert.equal(old.revision,0);assert.equal(old.canManage,true);assert.equal((await pref('33333333-3333-4333-8333-333333333333')).canManage,false);
+    await assert.rejects(pref(b),/ACCESS_DENIED/);await assert.rejects(pref('33333333-3333-4333-8333-333333333333',true,'team',0),/ACCESS_DENIED|ADMIN_REQUIRED/);
+    assert.equal((await pref(a,true,'team',0)).revision,1);await assert.rejects(pref(a,true,'api',0),/VERSION_CONFLICT/);await assert.rejects(pref(a,true,'invented',1),/INVALID_PLAN/);
+    assert.equal((await pref(a,true,null,1)).plan,null);await db.exec('reset role');assert.equal((await one('select enabled from public.al_billing_accounts where organization_id=$1',[oa])).enabled,false);
+  });
+  await t.test('webhook rotation requires a disabled tenant-owned endpoint and blocks uncertain delivery',async()=>{
+    await service();const w=(await one("select public.al_configure_webhook($1,$2,'https://example.com/security-webhook',$3) data",[a,oa,'a'.repeat(64)])).data;
+    const rotate=async(who=a,org=oa)=>(await one('select public.al_rotate_webhook($1,$2,$3,$4) data',[who,org,w.id,'b'.repeat(64)])).data;
+    await assert.rejects(rotate(),/WEBHOOK_MUST_BE_DISABLED/);await assert.rejects(rotate(b,ob),/WEBHOOK_NOT_FOUND/);
+    await db.exec('reset role');await db.query('update public.al_webhook_endpoints set active=false where id=$1',[w.id]);await db.query("insert into al_private.signing_outbox(organization_id,envelope_id,kind,effect_key,payload,status) values($1,$2,'webhook',$3,$4,'reconcile')",[oa,(await one('select envelope_id from al_private.signing_cases where organization_id=$1 limit 1',[oa])).envelope_id,crypto.randomUUID(),{endpointId:w.id}]);await service();await assert.rejects(rotate(),/WEBHOOK_DELIVERIES_PENDING/);
+    await db.exec('reset role');await db.query("update al_private.signing_outbox set status='accepted' where payload->>'endpointId'=$1",[w.id]);await service();assert.equal((await rotate()).rotated,true);await db.exec('reset role');assert.equal((await one('select secret from al_private.webhook_secrets where endpoint_id=$1',[w.id])).secret,'b'.repeat(64));
+  });
+  await t.test('security HTTP boundary uses verified identity and stores a hash instead of the raw API credential',async()=>{
+    const {securityRoute}=await import('../supabase/functions/avtalslank-api/security.ts');const client:any={rpc:async(name:string,args:Record<string,unknown>)=>{try{await service();const ks=Object.keys(args);return{data:(await one(`select public.${name}(${ks.map((k,i)=>`${k} => $${i+1}`).join(',')}) data`,Object.values(args))).data,error:null};}catch(error){return{data:null,error};}}};
+    const req=new Request('https://avtalslank.test/v1/security/keys',{method:'POST'}),identity={actor:a,keyHash:null,organizationId:oa};
+    const v:any=await securityRoute(req,'/v1/security/keys',client,identity,{action:'create',name:'HTTP integration',scopes:['envelopes:read'],expiryDays:30});assert.match(v.data.key,/^al_live_[a-f0-9]{64}$/);
+    await db.exec('reset role');const stored=await one('select token_hash,expires_at from public.al_api_keys where id=$1',[v.data.id]);assert.equal(stored.token_hash,await sha256Hex(v.data.key));assert.ok(stored.expires_at);
+    await assert.rejects(securityRoute(req,'/v1/security/keys',client,{...identity,keyHash:'x'},{action:'revoke_all'}),/AUTH_REQUIRED/);
+    await assert.rejects(securityRoute(req,'/v1/security/keys',client,identity,{action:'create',name:'Bad',scopes:['owner'],expiryDays:30}),/INVALID_KEY/);
+  });
   await db.close();
 });

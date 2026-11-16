@@ -1,3 +1,4 @@
+import {SecurityKeys,LegalAccount,PlanPreference} from "./AccountControls";
 import GettingStarted from "./GettingStarted";
 import {filterAgreements,agreementCsv} from "../../packages/workspace/src/index";
 import {PublicSite} from "./PublicSite";
@@ -1769,144 +1770,9 @@ function Developer({
   action: (fn: () => Promise<void>) => Promise<void>;
   busy: boolean;
 }) {
-  const [keys, setKeys] = useState<
-      Array<{
-        id: string;
-        name: string;
-        prefix: string;
-        revoked_at: string | null;
-      }>
-    >([]),
-    [secret, setSecret] = useState(""),
-    [name, setName] = useState("");
-  async function load() {
-    const { data, error } = await supabase
-      .from("al_api_keys")
-      .select("id,name,prefix,revoked_at,scopes,created_at")
-      .eq("organization_id", orgId);
-    if (error) throw error;
-    setKeys(data ?? []);
-  }
-  useEffect(() => {
-    action(load);
-    setSecret("");
-  }, [orgId]);
-  return (
-    <>
-      <section className="developer-banner">
-        <Code2 size={30} />
-        <div>
-          <h2>Samma avtal. Ditt eget flöde.</h2>
-          <p>
-            Skapa utkast och hantera mottagare via ett organisationsbundet API.
-          </p>
-        </div>
-        <span className="badge draft">API v1</span>
-      </section>
-      <section className="panel detail-panel">
-        <h2>API-nycklar</h2>
-        <p className="muted">
-          Endast ägare och administratörer kan skapa nycklar. Hemligheten visas
-          en gång.
-        </p>
-        {secret && (
-          <div className="secret-box" role="status">
-            <strong>Spara din nya nyckel säkert.</strong>
-            <code>{secret}</code>
-            <div className="actions">
-              <button
-                className="secondary"
-                onClick={() => navigator.clipboard.writeText(secret)}
-              >
-                <Copy size={15} />
-                Kopiera
-              </button>
-              <button className="text-button" onClick={() => setSecret("")}>
-                Jag har sparat den
-              </button>
-            </div>
-          </div>
-        )}
-        <form
-          className="inline-form"
-          onSubmit={(ev) => {
-            ev.preventDefault();
-            action(async () => {
-              const { data } = await supabase.auth.getSession();
-              const response = await fetch(`${apiUrl}/v1/api-keys`, {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${data.session?.access_token}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  organizationId: orgId,
-                  name,
-                  scopes: ["envelopes:read", "envelopes:write", "billing:read"],
-                }),
-              });
-              const result = await response.json();
-              if (!response.ok) throw new Error(result.error?.code);
-              setSecret(result.data.key);
-              setName("");
-              await load();
-            });
-          }}
-        >
-          <label>
-            Nyckelns namn
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              minLength={2}
-              required
-              placeholder="Till exempel företagets integration"
-            />
-          </label>
-          <button className="primary" disabled={busy}>
-            <Plus size={16} />
-            Skapa nyckel
-          </button>
-        </form>
-        {keys.map((k) => (
-          <div className="list-row" key={k.id}>
-            <Code2 size={19} />
-            <span className="grow">
-              <strong>{k.name}</strong>
-              <small>
-                {k.prefix}… · {k.revoked_at ? "Återkallad" : "Aktiv"}
-              </small>
-            </span>
-            <button
-              className="secondary"
-              disabled={!!k.revoked_at || busy}
-              onClick={() =>
-                action(async () => {
-                  await rpc("al_revoke_api_key", { p_org: orgId, p_id: k.id });
-                  await load();
-                })
-              }
-            >
-              Återkalla
-            </button>
-          </div>
-        ))}
-      </section>
-      <section className="panel detail-panel">
-        <h2>Kom igång</h2>
-        <p className="muted">
-          Använd Bearer-autentisering och en unik Idempotency-Key för skrivande
-          anrop.
-        </p>
-        <pre>{`POST ${apiUrl}/v1/envelopes\nAuthorization: Bearer <din-api-nyckel>\nIdempotency-Key: <unik-referens>\nContent-Type: application/json\n\n{"draft":{"title":"Samarbetsavtal"}}`}</pre>
-        <p className="muted">
-          Nyckeln ger aldrig rätt att sätta signeringsstatus eller kringgå
-          dokumentkontrollen. Tillgängliga metoder visas i företagets inställningar.
-        </p>
-      </section>
-    </>
-  );
+  return <><SecurityKeys key={orgId} orgId={orgId}/><section className="panel detail-panel"><h2>API-dokumentation</h2><p>Använd Bearer-autentisering och en unik Idempotency-Key för skrivande anrop.</p><a href="/openapi.json">Öppna API-specifikationen</a></section></>;
 }
+
 function SettingsView({
   org,
   capabilities,
@@ -1934,6 +1800,8 @@ function SettingsView({
   return (
     <div className="settings-grid">
       <AccountSecurity/>
+      <LegalAccount/>
+      <PlanPreference key={"plan-"+org.id} orgId={org.id}/>
       <OperationalStatus key={org.id} orgId={org.id}/>
       <section className="panel detail-panel">
         <h2>Företag</h2>

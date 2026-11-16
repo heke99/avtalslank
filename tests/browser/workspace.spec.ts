@@ -6,6 +6,7 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
   let recipients: Array<Record<string, unknown>> = initialRecipients;
   let templates: Array<Record<string, unknown>> = [];
   let contacts: Array<Record<string, unknown>> = [];
+  let keys:any[]=[];let legalAccepted=false;let planState={plan:null as string|null,revision:0,canManage:true,updatedAt:null as string|null};
   let invitations: Array<Record<string, unknown>> = [];
   await page.addInitScript(
     ({ ref }) => {
@@ -43,7 +44,11 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
     if (req.method() === "OPTIONS")
       return route.fulfill({ status: 204, headers });
     let value: unknown = [];
-    if(path.endsWith('/team/invitations')){
+    if(path.endsWith('/security/keys')){
+      if(req.method()==='POST'){const b=req.postDataJSON();if(b.action==='revoke_all'){keys=keys.map(k=>({...k,revoked_at:new Date().toISOString()}));value={data:{count:keys.length}};}else{const old=keys.find(k=>k.id===b.id);if(old)old.revoked_at=new Date().toISOString();const k={id:crypto.randomUUID(),name:old?.name??b.name,prefix:'al_live_0123abcd',scopes:old?.scopes??b.scopes,expires_at:old?.expires_at??new Date(Date.now()+b.expiryDays*86400000).toISOString(),last_used_at:null,revoked_at:null,created_at:new Date().toISOString()};keys=[k,...keys];value={data:{...k,key:'al_live_ui-only-test-key'}};}}else value={data:keys};
+    }else if(path.endsWith('/account/legal')){if(req.method()==='POST')legalAccepted=true;value={data:{document:{version:'2026-11-16.2',sha256:'a'.repeat(64),url:'/legal/2026-11-16.2/villkor.html'},accepted:legalAccepted,acceptedAt:legalAccepted?'2026-11-16T12:00:00Z':null,history:legalAccepted?[{version:'2026-11-16.2',sha256:'a'.repeat(64),acceptedAt:'2026-11-16T12:00:00Z'}]:[]}};
+    }else if(path.endsWith('/plan-preference')){if(req.method()==='POST'){const b=req.postDataJSON();planState={...planState,plan:b.plan,revision:planState.revision+1,updatedAt:new Date().toISOString()};}value={data:planState};
+    }else if(path.endsWith('/team/invitations')){
       if(req.method()==='POST'){const b=req.postDataJSON();const i={id:'44444444-4444-4444-8444-444444444444',email:b.email,role:b.role,expires_at:new Date(Date.now()+86400000).toISOString()};invitations=[i];value={data:{...i,token:'a'.repeat(64)}};}else value={data:invitations};
     }else if(path.endsWith('/team/revoke')){invitations=invitations.map(i=>({...i,revoked_at:new Date().toISOString()}));value={data:{revoked:true}};}
     else if(path.endsWith('/status'))value={data:{workerFresh:false,signingConfigured:false,deliveries:{pending:2}}};
@@ -667,4 +672,29 @@ test('activity filtering searches localized and technical event names without cl
 });
 test('invalid upload gives a specific PDF error and resets the upload state for retry',async({page})=>{
  await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('PDF-kontroll');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByLabel('Ladda upp PDF').setInputFiles({name:'invalid.pdf',mimeType:'application/pdf',buffer:Buffer.from('not a pdf')});await expect(page.getByRole('alert')).toContainText('giltig PDF-fil');await expect(page.getByText('Välj en PDF att ladda upp',{exact:true})).toBeVisible();await expect(page.getByLabel('Ladda upp PDF')).toBeEnabled();
+});
+
+test('key creation, filtering, atomic rotation presentation and bulk revocation',async({page})=>{
+ await workspace(page);await page.getByRole('button',{name:'API & integration',exact:true}).click();
+ await page.getByLabel('Nyckelnamn').fill('Lagersystem');await page.getByLabel('Giltighetstid').selectOption('30');await page.getByRole('button',{name:'Skapa API-nyckel',exact:true}).click();
+ await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Jag har sparat nyckeln'}).click();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Sök nyckel').fill('saknas');await expect(page.getByRole('button',{name:'Byt nyckel',exact:true})).toHaveCount(0);await page.getByLabel('Sök nyckel').fill('Lager');
+ page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Byt nyckel',exact:true}).click();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toBeVisible();await page.getByLabel('Nyckelstatus').selectOption('revoked');await expect(page.getByText(/Återkallad/,{exact:false})).toBeVisible();
+ page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Återkalla alla nycklar',exact:true}).click();await page.getByLabel('Nyckelstatus').selectOption('active');await expect(page.getByRole('button',{name:'Byt nyckel',exact:true})).toHaveCount(0);
+});
+test('terms acceptance is explicit, versioned and separate from plan interest and payment',async({page})=>{
+ let legalPosts=0,planPosts=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/account/legal'))legalPosts++;if(r.method()==='POST'&&r.url().includes('/plan-preference'))planPosts++;});
+ await workspace(page);await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByRole('button',{name:'Acceptera kontovillkor'})).toBeDisabled();expect(legalPosts).toBe(0);
+ await expect(page.getByRole('link',{name:'Läs kontovillkor, version 2026-11-16.2'})).toHaveAttribute('href','/legal/2026-11-16.2/villkor.html');await page.getByLabel('Jag accepterar kontovillkoren för mitt konto.').check();await page.getByRole('button',{name:'Acceptera kontovillkor'}).click();await expect(page.getByText(/^Accepterade /)).toBeVisible();expect(legalPosts).toBe(1);
+ await page.getByText('Historik över accepterade villkor',{exact:true}).click();await expect(page.getByText('SHA-256:',{exact:false})).toBeVisible();await page.getByLabel('Upplägg',{exact:true}).selectOption('api');await page.getByRole('button',{name:'Spara planintresse'}).click();await expect(page.getByText('Senast sparat',{exact:false})).toBeVisible();expect(planPosts).toBe(1);await expect(page.getByText('Ingen betalning aktiverad',{exact:true})).toBeVisible();
+ await page.screenshot({path:'.verification/account-controls.png',fullPage:true});
+});
+test('webhook secret replacement requires disabled connection and remains a one-time display',async({page})=>{
+ await workspace(page);let active=true,blocked=true;
+ await page.route(`https://${ref}.supabase.co/rest/v1/al_webhook_endpoints*`,r=>r.fulfill({json:[{id:'55555555-5555-4555-8555-555555555555',url:'https://example.com/customer-hook',active}]}));
+ await page.route(`https://${ref}.supabase.co/functions/v1/avtalslank-api/v1/webhooks`,r=>{active=r.request().postDataJSON().active;return r.fulfill({json:{data:{id:'55555555-5555-4555-8555-555555555555'}}});});
+ await page.route(`https://${ref}.supabase.co/functions/v1/avtalslank-api/v1/security/webhook-rotate`,r=>blocked?r.fulfill({status:400,json:{error:{code:'WEBHOOK_DELIVERIES_PENDING',message:'WEBHOOK_DELIVERIES_PENDING'}}}):r.fulfill({json:{data:{rotated:true,secret:'b'.repeat(64)}}}));
+ await page.getByRole('button',{name:'API & integration',exact:true}).click();await expect(page.getByRole('button',{name:'Byt hemlighet',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Stäng av',exact:true}).click();
+ page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Byt hemlighet',exact:true}).click();await expect(page.getByRole('alert')).toContainText('pågående eller osäkra leveranser');
+ blocked=false;page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Byt hemlighet',exact:true}).click();await expect(page.getByText('b'.repeat(64),{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Aktivera',exact:true})).toBeVisible();await page.getByRole('button',{name:'Jag har sparat hemligheten'}).click();await expect(page.getByText('b'.repeat(64),{exact:true})).toHaveCount(0);expect(active).toBe(false);
 });

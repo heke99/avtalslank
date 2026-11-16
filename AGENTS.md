@@ -19,3 +19,5 @@ Public entry and launch scope: docs/work/public-launch.md. Planned Start/Team/AP
 Active register/UI and workspace iteration: docs/work/register-and-workspace.md. CSV exports only the visible current-organization subset and neutralizes formula-like cells. MFA recovery targets unfinished app factors only; server Auth remains authoritative.
 
 Current production UX/API work: docs/work/production-ux-api.md. Customer pages omit internal build/launch language. This never enables unverified signing/payment capabilities. Cursor/filter parameters never authorize tenant access; query RPC remains service-only behind verified Edge identity.
+
+Current account/integration controls: docs/work/account-security-controls.md. Key rotation must preserve scopes/expiry, and webhook rotation must block unresolved delivery outcomes. Individual account terms acceptance never activates billing or concludes a DPA.

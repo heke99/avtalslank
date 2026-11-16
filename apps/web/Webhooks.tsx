@@ -1,3 +1,4 @@
+import {accountApi} from "./AccountOperations";
 import {requestJson} from "../../packages/http/src/index";
 import React, { useEffect, useState } from "react";
 import { apiUrl, supabase, friendlyError,displayError } from "./client";
@@ -20,6 +21,7 @@ export default function Webhooks({ orgId }: { orgId: string }) {
     setItems([]);
     load().catch((e) => setError(displayError(e)));
   }, [orgId]);
+  async function rotate(id:string){if(!confirm('Byta webhook-hemlighet? Uppdatera mottagaren med den nya hemligheten innan du aktiverar anslutningen igen.'))return;setBusy(true);setError('');setSecret('');try{const v=await accountApi('/v1/security/webhook-rotate',orgId,{id});setSecret(v.secret);await load();}catch(e){setError(displayError(e));}finally{setBusy(false);}}
   async function save(body: unknown) {
     setBusy(true);
     setError("");
@@ -49,6 +51,7 @@ export default function Webhooks({ orgId }: { orgId: string }) {
         ignorera redan behandlade händelse-ID:n i ditt system. Endast ägare och
         administratörer kan ändra anslutningen.
       </p>
+      <p className="muted">Stäng av anslutningen före byte av hemlighet. Pågående eller osäkra leveranser måste först vara utredda.</p>
       {error && <p role="alert">{error}</p>}
       {items.map((w) => (
         <div className="list-row" key={w.id}>
@@ -56,6 +59,7 @@ export default function Webhooks({ orgId }: { orgId: string }) {
             <strong style={{ overflowWrap: "anywhere" }}>{w.url}</strong>
             <small>{w.active ? "Aktiv" : "Avstängd"}</small>
           </span>
+          {!w.active&&<button className="secondary" disabled={busy} onClick={()=>rotate(w.id)}>Byt hemlighet</button>}
           <button
             className="secondary"
             disabled={busy}
