@@ -1,5 +1,7 @@
+import {TemplateApply} from "./TemplateApply";
+import {moveField,copyField,validateEditorFields} from "../../packages/editor/src/index";
 import {requestJson} from "../../packages/http/src/index";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { apiUrl, supabase, friendlyError,displayError } from "./client";
 type Doc = {
   id: string;
@@ -39,7 +41,7 @@ export function SigningPreparation({
   locked,
   documents,
   recipients,
-  onSaved,
+  onSaved,onDirty,
 }: {
   orgId: string;
   envelopeId: string;
@@ -47,7 +49,7 @@ export function SigningPreparation({
   locked: boolean;
   documents: Doc[];
   recipients: Recipient[];
-  onSaved: (e: any) => void;
+  onSaved: (e: any) => void;onDirty:(dirty:boolean)=>void;
 }) {
   const [fields, setFields] = useState<Field[]>([]),
     [busy, setBusy] = useState(false),
@@ -55,14 +57,18 @@ export function SigningPreparation({
     [loaded, setLoaded] = useState(false),
     [preview, setPreview] = useState<string | null>(null),
     [previewDoc, setPreviewDoc] = useState<Doc | null>(null),
-    [page, setPage] = useState(0);
+    [page, setPage] = useState(0),[selected,setSelected]=useState(""),[saved,setSaved]=useState("[]"),[notice,setNotice]=useState("");
+  const alive=useRef(true);useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
+  const dirty=loaded&&JSON.stringify(fields)!==saved;
+  useEffect(()=>{onDirty(dirty);},[dirty,onDirty]);
+  useEffect(()=>{const leave=(ev:BeforeUnloadEvent)=>{if(dirty){ev.preventDefault();ev.returnValue="";}};window.addEventListener("beforeunload",leave);return()=>window.removeEventListener("beforeunload",leave);},[dirty]);
   useEffect(() => {
     let active = true;
     setLoaded(false);
     envelopeApi(orgId, envelopeId, "prepare")
       .then((s) => {
         if (active) {
-          setFields(s.envelope.fields ?? []);
+          setFields(s.envelope.fields ?? []);setSaved(JSON.stringify(s.envelope.fields??[]));
           setLoaded(true);
         }
       })
@@ -93,6 +99,9 @@ export function SigningPreparation({
           {error}
         </div>
       )}
+      {!locked&&<TemplateApply orgId={orgId} documents={documents} recipients={recipients} fields={fields} disabled={busy||!loaded} onApply={(v,name,version)=>{setFields(v);setSelected(v.at(-1)?.id??'');setNotice('Fält från '+name+' (version '+version+') har lagts in. Spara dokumentfälten för att behålla dem.');}}/>}
+      {notice&&<p role="status">{notice}</p>}
+      <p className="muted">{dirty?'Dokumentfälten har osparade ändringar.':'Dokumentfälten är sparade.'}</p>
       <label>
         Dokument att förhandsvisa
         <select
@@ -107,7 +116,7 @@ export function SigningPreparation({
                 .from("al-documents")
                 .download(doc.storage_path);
               if (error) throw error;
-              setPreview(URL.createObjectURL(data));
+              if(!alive.current)return;setError("");setPreview(URL.createObjectURL(data));
               setPreviewDoc(doc);
               setPage(0);
             } catch {
@@ -142,12 +151,13 @@ export function SigningPreparation({
               ))}
             </select>
           </label>
-          <div
+          <label>Fält att placera<select aria-label="Fält att placera" value={selected} disabled={locked||busy} onChange={e=>setSelected(e.target.value)}><option value="">Välj ett fält</option>{fields.filter(f=>f.documentId===previewDoc.id&&f.page===page).map(f=><option key={f.id} value={f.id}>{f.label} · {recipients.find(r=>r.id===f.recipientId)?.name}</option>)}</select></label>
+          <div tabIndex={locked?-1:0} role="group" aria-label="Positionsyta för valt fält" onKeyDown={event=>{if(locked||busy)return;const delta=event.shiftKey?0.05:0.01;const directions:Record<string,[number,number]>={ArrowLeft:[-delta,0],ArrowRight:[delta,0],ArrowUp:[0,-delta],ArrowDown:[0,delta]};const direction=directions[event.key],f=fields.find(f=>f.id===selected&&f.documentId===previewDoc.id&&f.page===page);if(direction&&f){event.preventDefault();update(f.id,moveField(f,...direction));}}}
             className="field-canvas"
             onClick={(e) => {
-              if (locked) return;
+              if (locked||busy) return;
               const f = fields.find(
-                (f) => f.documentId === previewDoc.id && f.page === page,
+                (f) => f.id===selected&&f.documentId === previewDoc.id && f.page === page,
               );
               if (!f) return;
               const r = e.currentTarget.getBoundingClientRect();
@@ -173,7 +183,7 @@ export function SigningPreparation({
               .filter((f) => f.documentId === previewDoc.id && f.page === page)
               .map((f) => (
                 <span
-                  className="placed-field"
+                  className={"placed-field"+(selected===f.id?" selected":"")}
                   key={f.id}
                   style={{
                     left: f.x * 100 + "%",
@@ -186,7 +196,7 @@ export function SigningPreparation({
                 </span>
               ))}
           </div>
-          <p className="muted">
+          <p className="muted">Välj fältet som ska flyttas. Använd piltangenterna för 1 procentenhet eller Skift + pil för 5.
             Positionsytan visar ungefärlig placering. Procentvärdena nedan styr
             den sparade placeringen.
           </p>
@@ -300,6 +310,7 @@ export function SigningPreparation({
             >
               Ta bort fält
             </button>
+            <button type="button" className="secondary" disabled={fields.length>=200} onClick={()=>{const copied=copyField(f);setFields([...fields,copied]);setSelected(copied.id);}}>Kopiera dokumentfält</button>
           </div>
         ))}
         <div className="operation-tools">
@@ -312,7 +323,7 @@ export function SigningPreparation({
             }
             onClick={() => {
               const doc = previewDoc ?? documents.find((d) => d.page_count);
-              if (!doc) return;
+              if (!doc){setPreview(null);setPreviewDoc(null);return;}
               setFields([
                 ...fields,
                 {
@@ -339,11 +350,12 @@ export function SigningPreparation({
               setBusy(true);
               setError("");
               try {
+                validateEditorFields(fields,documents,recipients);
                 const e = await envelopeApi(orgId, envelopeId, "fields", {
                   generation,
                   fields,
                 });
-                onSaved(e);
+                setFields(e.fields??fields);setSaved(JSON.stringify(e.fields??fields));setNotice("Dokumentfälten är sparade.");onSaved(e);
               } catch (e) {
                 setError(displayError(e));
               } finally {

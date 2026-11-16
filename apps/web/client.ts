@@ -17,6 +17,13 @@ export const apiUrl =
   import.meta.env.VITE_API_URL || `${url}/functions/v1/avtalslank-api`;
 export const friendlyError = (message: string) =>
   ({
+    INVALID_TEMPLATE_LAYOUT: "Kontrollera mallfältens etiketter, roller, sidnummer och placering. Fälten måste ligga inom sidan.",
+    FIELD_LIMIT: "Ett avtal kan ha högst 200 dokumentfält.",
+    EMPTY_TEMPLATE: "Fältmallen innehåller inga fält.",
+    TEMPLATE_SIGNATURE_FIELD: "Den här mallen innehåller underskriftsfält. Använd en mall med text- och datumfält för dokumentinmatning. Signeringsmetod väljs separat för mottagaren.",
+    ROLE_MAPPING_REQUIRED: "Välj en mottagare för varje roll i fältmallen.",
+    INVALID_FIELDS: "Kontrollera fältens etiketter, typer och obligatoriska värden.",
+    FIELD_OUTSIDE_PAGE: "Ett fält ligger utanför sidan. Kontrollera placering, bredd och höjd.",
     KEY_NOT_ACTIVE: "Nyckeln är utgången eller återkallad. Skapa en ny nyckel.",
     INVALID_KEY_EXPIRY: "Välj en giltighetstid mellan 1 och 365 dagar eller utan slutdatum.",
     INVALID_KEY: "Ange ett nyckelnamn och minst en giltig behörighet.",
@@ -55,8 +62,8 @@ export const friendlyError = (message: string) =>
       "Tjänsten kan inte ta emot utskicket just nu. Ditt utkast är sparat.",
     INVALID_FIELD_ASSIGNMENT:
       "Kontrollera fältets dokument, sida och mottagare.",
-    INVALID_FIELDS: "Kontrollera dokumentfälten.",
-    FIELD_OUTSIDE_PAGE: "Fältet måste ligga inom dokumentets sida.",
+
+
     FINAL_DOCUMENT_NOT_READY: "Slutdokumentet är inte klart ännu.",
     DOCUMENT_TOTAL_LIMIT: "Dokumenten får tillsammans vara högst 50 MB.",
     DOCUMENT_REQUIRED: "Ladda upp en PDF först.",

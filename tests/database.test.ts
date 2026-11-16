@@ -1847,5 +1847,23 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await assert.rejects(securityRoute(req,'/v1/security/keys',client,{...identity,keyHash:'x'},{action:'revoke_all'}),/AUTH_REQUIRED/);
     await assert.rejects(securityRoute(req,'/v1/security/keys',client,identity,{action:'create',name:'Bad',scopes:['owner'],expiryDays:30}),/INVALID_KEY/);
   });
+  await t.test('copied template fields persist independently with version fencing, tenant checks and bounded draft expiry',async()=>{
+    const {applyTemplate}=await import('../packages/editor/src/index.ts');
+    await actor(a);const e=(await one("select public.al_save_draft($1,'Template editor contract') data",[oa])).data;
+    const recipient=(await one("select public.al_add_recipient($1,$2,'Mapped signer','mapped@example.invalid','email_approval',1) data",[oa,e.id])).data;
+    const source=[{id:crypto.randomUUID(),label:'Kundnamn',type:'text',recipientRole:'Kund',required:false,page:1,x:0.1,y:0.2,width:0.4,height:0.05}];
+    const template=(await one("select public.al_save_template($1,'Editor template',$2) data",[oa,source])).data;
+    const doc={id:crypto.randomUUID(),status:'ready',page_count:2};await db.exec('reset role');await db.query("insert into public.al_documents(id,organization_id,envelope_id,name,storage_path,sha256,byte_size,status,page_count) values($1,$2,$3,'editor.pdf',$4,$5,5,'ready',2)",[doc.id,oa,e.id,oa+'/'+e.id+'/'+doc.id+'/original.pdf','a'.repeat(64)]);
+    const copied=applyTemplate(template,doc,{Kund:recipient.id},[recipient],[]);await service();let current=(await flow(e.id,'read')).envelope;
+    const saved=await flow(e.id,'fields',{generation:current.generation,fields:copied});assert.equal(saved.fields[0].required,false);assert.equal(saved.fields[0].page,1);assert.notEqual(saved.fields[0].id,source[0].id);
+    await assert.rejects(flow(e.id,'fields',{generation:current.generation,fields:copied}),/VERSION_CONFLICT/);
+    await assert.rejects(flow(e.id,'fields',{generation:saved.generation,fields:[{...copied[0],recipientId:b}]}),/INVALID_FIELD_ASSIGNMENT/);
+    await assert.rejects(db.query("select public.al_flow_command($1,null,$2,$3,'fields',$4)",[b,ob,e.id,{generation:saved.generation,fields:copied}]),/ENVELOPE_NOT_FOUND/);
+    await actor(a);await one('select public.al_save_template($1,$2,$3,$4,$5) data',[oa,'Changed editor template',[{...source[0],label:'Changed role text'}],template.id,template.version]);
+    assert.equal((await one('select fields from public.al_envelopes where id=$1',[e.id])).fields[0].label,'Kundnamn');
+    const updated=(await one("select public.al_save_draft($1,'Template editor contract','',false,30,$2,$3) data",[oa,e.id,saved.generation])).data;assert.equal(updated.expires_days,30);
+    for(const days of [0,91])await assert.rejects(db.query("select public.al_save_draft($1,'Invalid expiry','',false,$2,$3,$4)",[oa,days,e.id,updated.generation]),/al_envelopes_expires_days_check/);
+    await db.query('select public.al_cancel_envelope($1,$2)',[oa,e.id]);await service();await assert.rejects(flow(e.id,'fields',{generation:updated.generation,fields:copied}),/DOCUMENT_LOCKED/);
+  });
   await db.close();
 });

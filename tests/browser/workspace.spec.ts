@@ -1,10 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 const ref = "ykddnagtuacflilbchwx",
   org = "11111111-1111-4111-8111-111111111111";
-async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknown>>=[], initialRecipients:Array<Record<string,unknown>>=[]) {
+async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknown>>=[], initialRecipients:Array<Record<string,unknown>>=[], initialTemplates:Array<Record<string,unknown>>=[], initialDocuments:Array<Record<string,unknown>>=[]) {
   let envelopes: Array<Record<string, unknown>> = initialEnvelopes;
   let recipients: Array<Record<string, unknown>> = initialRecipients;
-  let templates: Array<Record<string, unknown>> = [];
+  let templates: Array<Record<string, unknown>> = initialTemplates;
   let contacts: Array<Record<string, unknown>> = [];
   let keys:any[]=[];let legalAccepted=false;let planState={plan:null as string|null,revision:0,canManage:true,updatedAt:null as string|null};
   let invitations: Array<Record<string, unknown>> = [];
@@ -102,6 +102,7 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
     else if (path.endsWith("/al_envelopes")) value = envelopes;
     else if (path.endsWith("/al_recipients")) value = recipients;
     else if (path.endsWith("/al_templates")) value = templates;
+    else if (path.endsWith("/al_documents")) value = initialDocuments;
     else if (
       path.endsWith("/al_events") ||
       path.endsWith("/al_documents") ||
@@ -125,8 +126,8 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
         organization_id: org,
         title: String(b.p_title).trim(),
         message: b.p_message ?? "",
-        sequential: false,
-        expires_days: 14,
+        sequential: b.p_sequential ?? false,
+        expires_days: b.p_expires_days ?? 14,
         status: "draft",
         generation: 1,
         updated_at: new Date().toISOString(),
@@ -698,4 +699,32 @@ test('webhook secret replacement requires disabled connection and remains a one-
  await page.getByRole('button',{name:'API & integration',exact:true}).click();await expect(page.getByRole('button',{name:'Byt hemlighet',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Stäng av',exact:true}).click();
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Byt hemlighet',exact:true}).click();await expect(page.getByRole('alert')).toContainText('pågående eller osäkra leveranser');
  blocked=false;page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Byt hemlighet',exact:true}).click();await expect(page.getByText('b'.repeat(64),{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Aktivera',exact:true})).toBeVisible();await page.getByRole('button',{name:'Jag har sparat hemligheten'}).click();await expect(page.getByText('b'.repeat(64),{exact:true})).toHaveCount(0);expect(active).toBe(false);
+});
+
+const editorEnvelopeId='aaaa1111-1111-4111-8111-111111111111',editorRecipientId='bbbb2222-2222-4222-8222-222222222222',editorDocId='cccc3333-3333-4333-8333-333333333333';
+const editorTemplate={id:'dddd4444-4444-4444-8444-444444444444',name:'Kunduppgifter',version:3,fields:[{id:'source-field',label:'Kundnamn',type:'text',recipientRole:'Kund',required:false,page:0,x:0.1,y:0.2,width:0.3,height:0.05}]};
+async function editorWorkspace(page:Page){
+ const envelope={id:editorEnvelopeId,organization_id:org,title:'Mallavtal',message:'',status:'draft',generation:1,sequential:false,expires_days:14,updated_at:new Date().toISOString()};let saved:any[]=[];let generation=1;
+ const doc={id:editorDocId,name:'avtal.pdf',status:'ready',page_count:2,storage_path:org+'/'+editorEnvelopeId+'/'+editorDocId+'/original.pdf',byte_size:100};
+ await workspace(page,[envelope],[{id:editorRecipientId,name:'Mottagaren',email:'recipient@example.invalid',method:'email_approval',position:1,status:'pending'}],[editorTemplate],[doc]);
+ await page.route('**/v1/envelopes/'+editorEnvelopeId+'/prepare*',r=>r.fulfill({json:{data:{envelope:{...envelope,generation,fields:saved}}}}));
+ await page.route('**/v1/envelopes/'+editorEnvelopeId+'/fields*',r=>{const b=r.request().postDataJSON();expect(b.generation).toBe(generation);saved=b.fields;generation++;return r.fulfill({json:{data:{...envelope,generation,fields:saved}}});});
+ const {PDFDocument}=await import('pdf-lib');const pdf=await PDFDocument.create();pdf.addPage([600,800]);pdf.addPage([600,800]);const bytes=Buffer.from(await pdf.save());await page.route('**/storage/v1/object/authenticated/al-documents/**',r=>r.fulfill({contentType:'application/pdf',body:bytes}));
+ await page.getByRole('button',{name:'Öppna Mallavtal',exact:true}).click();await page.getByRole('button',{name:/Uppgifter/}).click();return{saved:()=>saved};
+}
+test('template search and editor persist roles, required flags and page geometry',async({page})=>{
+ await workspace(page,[],[],[editorTemplate,{...editorTemplate,id:'eeee5555-5555-4555-8555-555555555555',name:'Årsuppgifter',version:1}]);await page.getByRole('button',{name:'Mallar',exact:true}).click();await page.getByLabel('Sök fältmall').fill('finns inte');await expect(page.getByText('Inga fältmallar matchar sökningen.')).toBeVisible();await page.getByLabel('Sök fältmall').fill('Kunduppgifter');await expect(page.locator('.template-row')).toHaveCount(1);await page.getByLabel('Sortera fältmallar').selectOption('version');await page.locator('.template-row').click();
+ const dialog=page.getByRole('dialog',{name:'Redigera fältmall'});await dialog.getByLabel('Mottagarroll för fält 1').fill('Firmatecknare');await dialog.getByLabel('Obligatoriskt fält').check();await dialog.getByLabel('Sida',{exact:true}).fill('2');await dialog.getByLabel('x för mallfält 1').fill('25');
+ let payload:any;page.on('request',r=>{if(r.url().endsWith('/al_save_template'))payload=r.postDataJSON();});await dialog.getByRole('button',{name:'Spara fältmall',exact:true}).click();await expect(dialog).toHaveCount(0);expect(payload.p_fields[0]).toMatchObject({recipientRole:'Firmatecknare',required:true,page:1,x:0.25});expect(payload.p_version).toBe(3);
+});
+test('template application requires role mapping, preserves changes until saved and submits the actual copied fields',async({page})=>{
+ const state=await editorWorkspace(page);await page.getByLabel('Fältmall att använda').selectOption(editorTemplate.id);await page.getByLabel('Mallens måldokument').selectOption(editorDocId);await page.getByRole('button',{name:'Lägg in mallens fält'}).click();await expect(page.getByRole('alert')).toContainText('Välj en mottagare för varje roll');await page.getByLabel('Mottagare för Kund').selectOption(editorRecipientId);await page.getByRole('button',{name:'Lägg in mallens fält'}).click();await expect(page.getByRole('button',{name:'Spara och granska'})).toBeDisabled();
+ page.once('dialog',d=>d.dismiss());await page.locator('.steps button').nth(0).click();await expect(page.getByRole('button',{name:'Spara dokumentfält',exact:true})).toBeVisible();await page.getByRole('button',{name:'Spara dokumentfält',exact:true}).click();await expect(page.getByRole('button',{name:'Spara och granska'})).toBeEnabled();expect(state.saved()).toHaveLength(1);expect(state.saved()[0]).toMatchObject({documentId:editorDocId,recipientId:editorRecipientId,label:'Kundnamn',required:false});expect(state.saved()[0].id).not.toBe('source-field');
+ await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'.verification/template-application.png',fullPage:true,animations:'disabled'});
+});
+test('selected canvas field supports keyboard placement and copies with new ID while preserving the first field',async({page})=>{
+ const state=await editorWorkspace(page);await page.getByLabel('Fältmall att använda').selectOption(editorTemplate.id);await page.getByLabel('Mallens måldokument').selectOption(editorDocId);await page.getByLabel('Mottagare för Kund').selectOption(editorRecipientId);await page.getByRole('button',{name:'Lägg in mallens fält'}).click();await page.getByRole('button',{name:'Kopiera dokumentfält',exact:true}).click();await page.getByLabel('Dokument att förhandsvisa',{exact:false}).selectOption(editorDocId);const select=page.getByLabel('Fält att placera');await expect(select.locator('option')).toHaveCount(3);const second=await select.locator('option').nth(2).getAttribute('value');await select.selectOption(second!);await page.getByRole('group',{name:'Positionsyta för valt fält'}).press('ArrowRight');await page.getByRole('button',{name:'Spara dokumentfält',exact:true}).click();expect(state.saved()).toHaveLength(2);expect(state.saved()[0].x).toBe(0.1);expect(state.saved()[1].x).toBe(0.13);expect(state.saved()[0].id).not.toBe(state.saved()[1].id);
+});
+test('draft validity is editable, bounded and sent through the versioned draft command',async({page})=>{
+ await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Giltighetsavtal');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByRole('button',{name:/Uppgifter/}).click();await page.getByLabel('Giltighetstid efter utskick (dagar)').fill('91');await page.getByRole('button',{name:'Spara och granska'}).click();await expect(page.getByLabel('Giltighetstid efter utskick (dagar)')).toBeVisible();let days:number|undefined;page.on('request',r=>{if(r.url().endsWith('/al_save_draft'))days=r.postDataJSON().p_expires_days;});await page.getByLabel('Giltighetstid efter utskick (dagar)').fill('30');await page.getByRole('button',{name:'Spara och granska'}).click();await expect(page.getByText('30 dagar',{exact:true})).toBeVisible();expect(days).toBe(30);
 });

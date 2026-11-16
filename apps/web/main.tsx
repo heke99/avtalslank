@@ -1,3 +1,4 @@
+import {templateList,validateTemplateFields} from "../../packages/editor/src/index";
 import {SecurityKeys,LegalAccount,PlanPreference} from "./AccountControls";
 import GettingStarted from "./GettingStarted";
 import {filterAgreements,agreementCsv} from "../../packages/workspace/src/index";
@@ -1074,10 +1075,11 @@ function EnvelopeDetail({
     [events, setEvents] = useState<Event[]>([]),
     [title, setTitle] = useState(e.title),
     [message, setMessage] = useState(e.message),
-    [sequential, setSequential] = useState(e.sequential);
+    [sequential, setSequential] = useState(e.sequential),[expiresDays,setExpiresDays]=useState(e.expires_days),[fieldsDirty,setFieldsDirty]=useState(false);
+  function goStep(next:number){if(next===step)return;if(fieldsDirty&&!confirm("Dokumentfälten är inte sparade. Lämna steget och kasta ändringarna?"))return;setFieldsDirty(false);setStep(next);}
   const draftForm=useRef<HTMLFormElement>(null);
   const [uploadStage,setUploadStage]=useState('');
-  const dirty=e.status==='draft'&&(title!==e.title||message!==e.message||sequential!==e.sequential);
+  const dirty=e.status==='draft'&&(title!==e.title||message!==e.message||sequential!==e.sequential||expiresDays!==e.expires_days||fieldsDirty);
   useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
   useEffect(()=>{const leave=(event:BeforeUnloadEvent)=>{if(dirty){event.preventDefault();event.returnValue='';}};const save=(event:KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'&&draftForm.current){event.preventDefault();if(!busy)draftForm.current.requestSubmit();}};window.addEventListener('beforeunload',leave);window.addEventListener('keydown',save);return()=>{window.removeEventListener('beforeunload',leave);window.removeEventListener('keydown',save);};},[dirty,busy]);
   async function load() {
@@ -1134,7 +1136,7 @@ function EnvelopeDetail({
             <button
               key={s}
               className={step === i ? "selected" : ""}
-              onClick={() => setStep(i)}
+              onClick={() => goStep(i)}
             >
               <span>{i + 1}</span>
               {s}
@@ -1260,7 +1262,7 @@ function EnvelopeDetail({
                 </button>
               </div>
             ))}
-            <button className="primary next" onClick={() => setStep(1)}>
+            <button className="primary next" onClick={() => goStep(1)}>
               Till mottagare
               <ArrowRight size={16} />
             </button>
@@ -1361,7 +1363,7 @@ function EnvelopeDetail({
                 </button>
               </form>
             )}
-            <button className="primary next" onClick={() => setStep(2)}>
+            <button className="primary next" onClick={() => goStep(2)}>
               Nästa steg
               <ArrowRight size={16} />
             </button>
@@ -1377,12 +1379,13 @@ function EnvelopeDetail({
               locked={locked}
               documents={documents}
               recipients={recipients}
-              onSaved={onSaved}
+              onSaved={onSaved} onDirty={setFieldsDirty}
             />
             <h2>Uppgifter och meddelande</h2>
+            {fieldsDirty&&<p role="status">Spara dokumentfälten innan du går vidare till granskning.</p>}
             <form ref={draftForm}
               onSubmit={(ev) => {
-                ev.preventDefault();
+                ev.preventDefault();if(fieldsDirty)return;
                 action(async () => {
                   const v = await rpc<Envelope>("al_save_draft", {
                     p_org: orgId,
@@ -1391,9 +1394,9 @@ function EnvelopeDetail({
                     p_title: title,
                     p_message: message,
                     p_sequential: sequential,
-                    p_expires_days: e.expires_days,
+                    p_expires_days: expiresDays,
                   });
-                  setTitle(v.title);setMessage(v.message);setSequential(v.sequential);onDirty(false);
+                  setTitle(v.title);setMessage(v.message);setSequential(v.sequential);setExpiresDays(v.expires_days);
                   onSaved(v);
                   setStep(3);
                 });
@@ -1419,6 +1422,8 @@ function EnvelopeDetail({
                   disabled={locked}
                 />
               </label>
+              <label>Giltighetstid efter utskick (dagar)<input aria-label="Giltighetstid efter utskick (dagar)" type="number" min={1} max={90} step={1} value={expiresDays} disabled={locked} required onChange={ev=>setExpiresDays(Number(ev.target.value))}/></label>
+              <p className="muted">1–90 dagar. Tiden börjar räknas när avtalet skickas.</p>
               <label className="checkbox">
                 <input
                   type="checkbox"
@@ -1428,7 +1433,7 @@ function EnvelopeDetail({
                 />
                 Signera i angiven turordning
               </label>
-              <button className="primary" disabled={busy || locked}>
+              <button className="primary" disabled={busy || locked || fieldsDirty}>
                 Spara och granska
                 <ArrowRight size={16} />
               </button>
@@ -1562,7 +1567,8 @@ function Templates({
   const [editing, setEditing] = useState<Template | null>(null),
     [name, setName] = useState(""),
     [fields, setFields] = useState<TemplateField[]>([]),
-    [open, setOpen] = useState(false);
+    [open, setOpen] = useState(false),[query,setQuery]=useState(""),[sort,setSort]=useState("name");
+  const shown=templateList(templates,query,sort);
   function begin(t?: Template) {
     setEditing(t ?? null);
     setName(t?.name ?? "");
@@ -1577,12 +1583,13 @@ function Templates({
           Ny fältmall
         </button>
       </div>
+      <div className="template-filters"><label>Sök fältmall<input value={query} onChange={ev=>setQuery(ev.target.value)} placeholder="Namn, etikett eller mottagarroll"/></label><label>Sortera fältmallar<select aria-label="Sortera fältmallar" value={sort} onChange={ev=>setSort(ev.target.value)}><option value="name">Namn A–Ö</option><option value="fields">Flest fält</option><option value="version">Högst version</option></select></label><p>{shown.length} av {templates.length} fältmallar</p></div>
       <section className="panel">
         {!templates.length ? (
           <Empty
             icon={<Layers size={27} />}
             title="Börja med en återanvändbar fältmall."
-            description="Spara fält och mottagarroller. Koppling av mall-PDF och visuell placering byggs vidare på denna modell."
+            description="Spara fält och mottagarroller. Koppla mallens roller till mottagare och använd fälten på en PDF i avtalet."
             action={
               <button className="secondary" onClick={() => begin()}>
                 Skapa fältmall
@@ -1590,7 +1597,7 @@ function Templates({
             }
           />
         ) : (
-          templates.map((t) => (
+          shown.length?shown.map((t) => (
             <button
               className="template-row"
               key={t.id}
@@ -1605,7 +1612,7 @@ function Templates({
               </span>
               <ArrowUpRight size={18} />
             </button>
-          ))
+          )):<p className="empty-card">Inga fältmallar matchar sökningen.</p>
         )}
       </section>
       {open && (
@@ -1655,7 +1662,7 @@ function Templates({
             onSubmit={(ev) => {
               ev.preventDefault();
               action(async () => {
-                validateFields(fields);
+                validateTemplateFields(fields);
                 await rpc("al_save_template", {
                   p_org: orgId,
                   p_name: name,
@@ -1674,11 +1681,11 @@ function Templates({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                minLength={2}
+                minLength={2} maxLength={160}
               />
             </label>
             {fields.map((f, i) => (
-              <div className="field-row" key={f.id}>
+              <div className="field-row template-field" key={f.id}>
                 <label>
                   Etikett
                   <input
@@ -1714,6 +1721,10 @@ function Templates({
                     <option value="signature">Underskrift</option>
                   </select>
                 </label>
+                <label>Mottagarroll<input aria-label={'Mottagarroll för fält '+(i+1)} maxLength={120} required value={f.recipientRole} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,recipientRole:ev.target.value}:v))}/></label>
+                <label className="checkbox"><input type="checkbox" checked={f.required} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,required:ev.target.checked}:v))}/>Obligatoriskt fält</label>
+                <label>Sida<input type="number" min={1} max={100} step={1} value={f.page+1} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,page:Number(ev.target.value)-1}:v))}/></label>
+                {(['x','y','width','height'] as const).map(k=><label key={k}>{{x:'Från vänster (%)',y:'Från toppen (%)',width:'Bredd (%)',height:'Höjd (%)'}[k]}<input aria-label={k+' för mallfält '+(i+1)} type="number" min={k==='width'||k==='height'?1:0} max={100} step={1} required value={Math.round(f[k]*100)} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,[k]:Number(ev.target.value)/100}:v))}/></label>)}
                 <button
                   type="button"
                   className="icon"
