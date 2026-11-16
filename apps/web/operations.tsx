@@ -1,3 +1,5 @@
+import {TeamInvitations} from "./AccountOperations";
+import {activityLabel} from "../../packages/domain/src/activity";
 import React, { useEffect, useState } from "react";
 import { supabase, rpc } from "./client";
 import {
@@ -609,8 +611,9 @@ export function WorkspaceOperations({
         <>
           <p>
             Ägare hanterar administratörer. Administratörer kan ändra avsändare
-            och läsare. Nya medlemmar bjuds ännu inte in här.
+            och läsare.
           </p>
+          <TeamInvitations orgId={orgId} admin={admin} owner={role==="owner"}/>
           {members.map((m) => (
             <form
               className="list-row"
@@ -740,7 +743,7 @@ export function WorkspaceOperations({
           </div>
           {events.map((e) => (
             <div className="list-row" key={e.id}>
-              <strong className="grow">{e.kind}</strong>
+              <strong className="grow">{activityLabel(e.kind)}</strong>
               <time>
                 {new Date(e.created_at).toLocaleString("sv-SE", {
                   timeZone: "Europe/Stockholm",

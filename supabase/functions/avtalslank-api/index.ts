@@ -1,3 +1,4 @@
+import {operationsRoute} from "./operations.ts";
 import { connectedRoute, publicSigning, boundedBytes } from "./connected.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.110.7";
 import { sha256Hex } from "../../../packages/crypto/src/hash.ts";
@@ -42,6 +43,8 @@ const safeCodes = new Set([
   "INVALID_WEBHOOK_CONFIGURATION",
   "WEBHOOK_NOT_FOUND",
   "DOCUMENT_TOTAL_LIMIT",
+  "INVALID_INVITATION", "INVITATION_NOT_FOUND", "INVITATION_LIMIT", "ALREADY_MEMBER", "LAST_OWNER", "OWNER_REQUIRED", "RECIPIENT_NOT_PENDING", "DELIVERY_PENDING", "DELIVERY_RECONCILIATION_REQUIRED", "REMINDER_LIMIT", "REMINDER_COOLDOWN",
+  "MFA_REQUIRED",
   "INVALID_ID",
   "INVALID_BODY",
   "INVALID_FIELDS",
@@ -130,6 +133,10 @@ Deno.serve(async (req: Request) => {
       if (error || !data.user)
         return response({ error: { code: "AUTH_REQUIRED", requestId } }, 401);
       verifiedActor = data.user.id;
+      if(data.user.factors?.some(f=>f.status==='verified')){
+        const claims=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        if(claims.aal!=='aal2')throw Error('MFA_REQUIRED');
+      }
     }
     let body: Record<string, unknown> = {};
     if (
@@ -143,6 +150,8 @@ Deno.serve(async (req: Request) => {
       if (!body || Array.isArray(body) || typeof body !== "object")
         throw new Error("INVALID_BODY");
     }
+    const opResult=await operationsRoute(req,path,service,{actor:verifiedActor,keyHash:isApi?await sha256Hex(token):null,organizationId:isApi?null:(body.organizationId??new URL(req.url).searchParams.get('organizationId')) as string|null},body);
+    if(opResult)return response(opResult);
     const connected = await connectedRoute(
       req,
       path,

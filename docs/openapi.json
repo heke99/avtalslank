@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Avtalslänk API",
-    "version": "0.3.0",
-    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId."
+    "version": "0.4.0",
+    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled."
   },
   "servers": [
     {
@@ -1564,6 +1564,198 @@
                 "required": [
                   "url"
                 ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/team/invitations": {
+      "get": {
+        "summary": "List up to 200 invitations; owner/admin only. organizationId query required.",
+        "responses": {
+          "200": {
+            "description": "Successful command/projection"
+          },
+          "400": {
+            "description": "Invalid state, invitation, cooldown or limits"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient membership, role or scope"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create invitation with email, role admin/sender/reader and organizationId. Only owner may offer admin. Returns token once; share /join/#token=TOKEN manually.",
+        "responses": {
+          "200": {
+            "description": "Successful command/projection"
+          },
+          "400": {
+            "description": "Invalid state, invitation, cooldown or limits"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient membership, role or scope"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/team/accept": {
+      "post": {
+        "summary": "Accept token as current confirmed invited email. Organization and role are derived from stored invitation. Exact retry is safe and never restores membership after leave.",
+        "responses": {
+          "200": {
+            "description": "Successful command/projection"
+          },
+          "400": {
+            "description": "Invalid state, invitation, cooldown or limits"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient membership, role or scope"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/team/revoke": {
+      "post": {
+        "summary": "Revoke pending invitation by id and organizationId; owner/admin only.",
+        "responses": {
+          "200": {
+            "description": "Successful command/projection"
+          },
+          "400": {
+            "description": "Invalid state, invitation, cooldown or limits"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient membership, role or scope"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/team/leave": {
+      "post": {
+        "summary": "Leave organizationId. Last owner denied; own API keys are revoked.",
+        "responses": {
+          "200": {
+            "description": "Successful command/projection"
+          },
+          "400": {
+            "description": "Invalid state, invitation, cooldown or limits"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient membership, role or scope"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/status": {
+      "get": {
+        "summary": "Read readiness projection and own organization queue counts. No claim of actual delivery. organizationId required for user tokens.",
+        "responses": {
+          "200": {
+            "description": "Successful command/projection"
+          },
+          "400": {
+            "description": "Invalid state, invitation, cooldown or limits"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient membership, role or scope"
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/remind": {
+      "post": {
+        "summary": "Queue reminder for recipientId. Sender permission, active link, correct sequential turn, accepted prior invitation, 30 minute cooldown and maximum three. organizationId required for user tokens.",
+        "responses": {
+          "200": {
+            "description": "Successful command/projection"
+          },
+          "400": {
+            "description": "Invalid state, invitation, cooldown or limits"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient membership, role or scope"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
               }
             }
           }

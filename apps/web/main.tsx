@@ -1,3 +1,5 @@
+import {AccountSecurity,OperationalStatus,JoinInvitation,RemindRecipient} from "./AccountOperations";
+import {activityLabel} from "../../packages/domain/src/activity";
 import React, { useEffect, useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session } from "@supabase/supabase-js";
@@ -123,6 +125,7 @@ function App() {
     [busy, setBusy] = useState(false),
     [modal, setModal] = useState<"create" | "org" | null>(null),
     [selected, setSelected] = useState<Envelope | null>(null),
+    [statusFilter,setStatusFilter]=useState(""),
     [query, setQuery] = useState(""),
     [mobileMenu, setMobileMenu] = useState(false);
   const org = orgs.find((o) => o.id === orgId);
@@ -160,7 +163,7 @@ function App() {
       setOrgs([]);
       setOrgId("");
     }
-  }, [session?.user.id]);
+  }, [session?.user.id,session?.access_token]);
   async function reload() {
     if (!orgId) return;
     const requestedScope = scope.current;
@@ -217,6 +220,8 @@ function App() {
   if (location.pathname.startsWith("/s/")) return <Signer />;
   if (location.pathname === "/reset-password")
     return <PasswordReset session={session} onError={notify} notice={notice} />;
+  if(session?.user.factors?.some(f=>f.status==="verified") && (()=>{try{return JSON.parse(atob(session.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).aal!=="aal2";}catch{return true;}})()) return <div className="auth-layout"><AccountSecurity/></div>;
+  if (location.pathname.startsWith("/join")) return <JoinInvitation session={session}><Auth onError={notify} notice={notice}/></JoinInvitation>;
   if (!session) return <Auth onError={notify} notice={notice} />;
   return (
     <div className="shell">
@@ -451,7 +456,7 @@ function App() {
                         Visa alla <ArrowRight size={16} />
                       </button>
                     ) : (
-                      <label className="search">
+                      <><label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">Alla statusar</option>{Object.entries(statusLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label className="search">
                         <Search size={17} />
                         <input
                           aria-label="Sök avtal"
@@ -459,7 +464,7 @@ function App() {
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
                         />
-                      </label>
+                      </label></>
                     )}
                   </div>
                   {envelopes.length === 0 ? (
@@ -490,6 +495,7 @@ function App() {
                         </thead>
                         <tbody>
                           {envelopes
+                            .filter(e=>view!=="agreements"||!statusFilter||e.status===statusFilter)
                             .filter((e) =>
                               e.title
                                 .toLocaleLowerCase("sv")
@@ -909,7 +915,7 @@ function Auth({
                       ? await supabase.auth.signUp({
                           email,
                           password,
-                          options: { emailRedirectTo: location.origin },
+                          options: { emailRedirectTo: location.origin+(location.pathname.startsWith("/join")?"/join/":"") },
                         })
                       : await supabase.auth.resetPasswordForEmail(email, {
                           redirectTo: location.origin + "/reset-password",
@@ -1233,6 +1239,7 @@ function EnvelopeDetail({
                   <small>{r.email}</small>
                 </span>
                 <span className="method-label">{methodLabels[r.method]}</span>
+                {locked && ["sent","in_progress"].includes(e.status) && r.status==="pending" && <RemindRecipient orgId={orgId} envelopeId={e.id} recipientId={r.id}/>}
                 {!locked && (
                   <RecipientTools
                     orgId={orgId}
@@ -1487,15 +1494,7 @@ function EnvelopeDetail({
             <div key={v.id}>
               <i />
               <span>
-                {(
-                  {
-                    "envelope.draft_saved": "Utkast sparat",
-                    "recipient.added": "Mottagare tillagd",
-                    "document.uploaded": "Dokument uppladdat",
-                    "document.scanned": "Dokumentkontroll utförd",
-                    "envelope.cancelled": "Utkast avbrutet",
-                  } as Record<string, string>
-                )[v.kind] ?? "Avtalshändelse"}
+                {activityLabel(v.kind)}
                 <small>{date(v.created_at)}</small>
               </span>
             </div>
@@ -1893,6 +1892,8 @@ function SettingsView({
   }, [org.id]);
   return (
     <div className="settings-grid">
+      <AccountSecurity/>
+      <OperationalStatus orgId={org.id}/>
       <section className="panel detail-panel">
         <h2>Företag</h2>
         <dl>

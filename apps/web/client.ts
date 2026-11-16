@@ -17,6 +17,16 @@ export const apiUrl =
   import.meta.env.VITE_API_URL || `${url}/functions/v1/avtalslank-api`;
 export const friendlyError = (message: string) =>
   ({
+    INVALID_INVITATION: "Inbjudan är ogiltig, utgången eller gäller en annan verifierad e-postadress.",
+    ALREADY_MEMBER: "Personen är redan medlem i företaget.",
+    LAST_OWNER: "Utse en annan ägare innan du lämnar företaget.",
+    OWNER_REQUIRED: "Endast en ägare kan bjuda in administratörer.",
+    DELIVERY_PENDING: "Vänta tills föregående utskick har behandlats.",
+    DELIVERY_RECONCILIATION_REQUIRED: "Leveransens utfall behöver stämmas av innan ett nytt utskick kan göras.",
+    REMINDER_COOLDOWN: "Vänta minst 30 minuter mellan utskick.",
+    REMINDER_LIMIT: "Högst tre påminnelser kan skickas per mottagare.",
+    MFA_REQUIRED: "Verifiera en kod från autentiseringsappen först.",
+    PASSWORD_MISMATCH: "Lösenorden stämmer inte överens.",
     ACCESS_DENIED: "Du saknar behörighet till företaget.",
     ADMIN_REQUIRED: "Endast ägare och administratör får göra detta.",
     VERSION_CONFLICT: "Utkastet har ändrats. Öppna det igen innan du sparar.",

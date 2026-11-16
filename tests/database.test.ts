@@ -8,7 +8,8 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
   const db = new PGlite();
   await db.waitReady;
   await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create schema storage;
- create table auth.users(id uuid primary key,email text);grant usage on schema auth,storage to anon,authenticated,service_role;
+ create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz default now());grant usage on schema auth,storage to anon,authenticated,service_role;
+ create table auth.mfa_factors(id uuid primary key default gen_random_uuid(),user_id uuid,status text);
  create function auth.uid() returns uuid language sql stable as $$select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid$$;
  `);
   await db.exec(`create function auth.role() returns text language sql stable as $$select nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role'$$;
@@ -1692,5 +1693,79 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
       );
     },
   );
+  await t.test('team invitations bind verified email, role and organization; retries cannot restore access',async()=>{
+    const reader='33333333-3333-4333-8333-333333333333';
+    const team=async(user:string,org:string|null,action:string,payload:unknown={})=>(await one('select public.al_team_command($1,$2,$3,$4) data',[user,org,action,payload])).data;
+    await actor(a);
+    await assert.rejects(team(a,oa,'list'),/permission denied/);
+    await service();
+    await assert.rejects(team(b,oa,'list'),/ACCESS_DENIED/);
+    const hash='9'.repeat(64);
+    const inv=await team(a,oa,'create',{email:' B@example.invalid ',role:'sender',tokenHash:hash});
+    assert.ok(inv.id);
+    await assert.rejects(team(a,oa,'create',{email:'b@example.invalid',role:'reader',tokenHash:'8'.repeat(64)}),/duplicate key/);
+    await assert.rejects(team(a,null,'accept',{tokenHash:hash}),/INVALID_INVITATION/);
+    await db.exec('reset role');await db.query('update auth.users set email_confirmed_at=null where id=$1',[b]);await service();
+    await assert.rejects(team(b,null,'accept',{tokenHash:hash}),/INVALID_INVITATION/);
+    await db.exec('reset role');await db.query('update auth.users set email_confirmed_at=now() where id=$1',[b]);await service();
+    assert.equal((await team(b,null,'accept',{tokenHash:hash})).organizationId,oa);
+    assert.equal((await team(b,null,'accept',{tokenHash:hash})).accepted,true);
+    await assert.rejects(team(b,oa,'create',{email:'new@example.invalid',role:'sender',tokenHash:'7'.repeat(64)}),/ADMIN_REQUIRED/);
+    await assert.rejects(team(a,oa,'create',{email:'b@example.invalid',role:'admin',tokenHash:'8'.repeat(64)}),/ALREADY_MEMBER/);
+    const listed=await team(a,oa,'list');assert.equal(JSON.stringify(listed).includes(hash),false);
+    await assert.rejects(team(a,oa,'leave'),/LAST_OWNER/);
+    assert.equal((await team(b,oa,'leave')).left,true);
+    assert.equal((await team(b,null,'accept',{tokenHash:hash})).accepted,true);
+    await assert.rejects(team(b,oa,'list'),/ACCESS_DENIED/);
+    const revoked=await team(a,oa,'create',{email:'b@example.invalid',role:'reader',tokenHash:'8'.repeat(64)});
+    await assert.rejects(team(b,ob,'revoke',{id:revoked.id}),/INVITATION_NOT_FOUND/);
+    await team(a,oa,'revoke',{id:revoked.id});
+    await assert.rejects(team(b,null,'accept',{tokenHash:'8'.repeat(64)}),/INVALID_INVITATION/);
+    await db.exec('reset role');await db.query("update public.al_memberships set active=true,role='admin' where organization_id=$1 and user_id=$2",[oa,b]);await service();
+    await assert.rejects(team(b,oa,'create',{email:'new@example.invalid',role:'admin',tokenHash:'7'.repeat(64)}),/OWNER_REQUIRED/);
+    await db.exec('reset role');await db.query('update public.al_memberships set active=false where organization_id=$1 and user_id=$2',[oa,b]);
+    await actor(reader);await assert.rejects(db.query('select * from al_private.team_invitations'),/permission denied/);
+  });
+  await t.test('MFA enrollment blocks direct organization access at AAL1 and permits AAL2',async()=>{
+    await db.exec('reset role');await db.query("insert into auth.mfa_factors(user_id,status) values($1,'verified')",[a]);
+    await actor(a);assert.equal((await db.query('select * from public.al_organizations where id=$1',[oa])).rows.length,0);
+    await assert.rejects(db.query("select public.al_save_draft($1,'MFA bypass')",[oa]),/ACCESS_DENIED/);
+    await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);
+    assert.equal((await db.query('select * from public.al_organizations where id=$1',[oa])).rows.length,1);
+    await db.exec('reset role');await db.query('delete from auth.mfa_factors where user_id=$1',[a]);
+  });
+  await t.test('reminders preserve link, fence repeated requests and isolate status projections',async()=>{
+    await actor(a);const e=(await one("select public.al_save_draft($1,'Reminder test') data",[oa])).data;
+    const r=(await one("select public.al_add_recipient($1,$2,'Reminder','reminder@example.invalid','email_approval',1) data",[oa,e.id])).data;
+    await db.exec('reset role');
+    await db.query("update public.al_envelopes set status='sent' where id=$1",[e.id]);
+    await db.query("insert into al_private.signing_cases(envelope_id,organization_id,snapshot,snapshot_hash,expires_at) values($1,$2,'{}',$3,now()+interval '1 day')",[e.id,oa,'a'.repeat(64)]);
+    const link=crypto.randomUUID();await db.query("insert into al_private.signing_links(id,envelope_id,recipient_id,token_hash,expires_at) values($1,$2,$3,$4,now()+interval '1 day')",[link,e.id,r.id,'b'.repeat(64)]);
+    await db.query("insert into al_private.signing_outbox(organization_id,envelope_id,kind,effect_key,payload,status,created_at) values($1,$2,'invitation',$3,$4,'accepted',now()-interval '31 minutes')",[oa,e.id,crypto.randomUUID(),{recipientId:r.id,linkId:link}]);
+    const remind=async(user=a,org=oa)=>(await one('select public.al_remind_signer($1,null,$2,$3,$4) data',[user,org,e.id,r.id])).data;
+    await service();await assert.rejects(remind(b,ob),/ENVELOPE_NOT_FOUND/);
+    assert.equal((await remind()).count,1);await assert.rejects(remind(),/DELIVERY_PENDING/);
+    await db.exec('reset role');await db.query("update al_private.signing_outbox set status='accepted' where envelope_id=$1",[e.id]);await service();await assert.rejects(remind(),/REMINDER_COOLDOWN/);
+    for(let i=2;i<=3;i++){
+      await db.exec('reset role');await db.query("update al_private.signing_outbox set status='accepted',created_at=now()-interval '31 minutes' where envelope_id=$1",[e.id]);await db.query("update al_private.signing_reminders set last_queued_at=now()-interval '31 minutes' where recipient_id=$1",[r.id]);await service();assert.equal((await remind()).count,i);
+    }
+    await db.exec('reset role');await db.query("update al_private.signing_outbox set status='reconcile' where envelope_id=$1",[e.id]);await service();await assert.rejects(remind(),/DELIVERY_RECONCILIATION_REQUIRED/);
+    await db.exec('reset role');await db.query("update al_private.signing_outbox set status='accepted' where envelope_id=$1",[e.id]);await service();await assert.rejects(remind(),/REMINDER_LIMIT/);
+    const own=(await one('select public.al_operational_status($1,null,$2) data',[a,oa])).data;
+    assert.ok(own.deliveries.accepted>=4);await assert.rejects(db.query('select public.al_operational_status($1,null,$2)',[b,oa]),/ACCESS_DENIED/);
+    await db.exec('reset role');assert.equal((await one('select count(*)::int n from al_private.signing_links where envelope_id=$1',[e.id])).n,1);
+    await db.query("update public.al_recipients set status='signed' where id=$1",[r.id]);await service();await assert.rejects(remind(),/RECIPIENT_NOT_PENDING/);
+  });
+  await t.test('team HTTP adapter hashes opaque tokens before storage and rejects API-key team access',async()=>{
+    const {operationsRoute}=await import('../supabase/functions/avtalslank-api/operations.ts');
+    const client:any={rpc:async(name:string,args:Record<string,unknown>)=>{try{await service();const keys=Object.keys(args);return{data:(await one(`select public.${name}(${keys.map((k,i)=>`${k} => $${i+1}`).join(',')}) data`,Object.values(args))).data,error:null};}catch(error){return{data:null,error};}}};
+    const identity={actor:a,keyHash:null,organizationId:oa};
+    const request=new Request('https://avtalslank.test/v1/team/invitations',{method:'POST'});
+    const v:any=await operationsRoute(request,'/v1/team/invitations',client,identity,{email:'http@example.invalid',role:'reader'});
+    assert.match(v.data.token,/^[a-f0-9]{64}$/);
+    await db.exec('reset role');const stored=await one('select token_hash from al_private.team_invitations where id=$1',[v.data.id]);assert.equal(stored.token_hash,await sha256Hex(v.data.token));assert.notEqual(stored.token_hash,v.data.token);
+    await assert.rejects(operationsRoute(request,'/v1/team/invitations',client,{actor:null,keyHash:'a'.repeat(64),organizationId:null},{email:'http@example.invalid',role:'owner'}),/AUTH_REQUIRED/);
+    await assert.rejects(operationsRoute(request,'/v1/team/invitations',client,identity,{email:'http@example.invalid',role:'owner'}),/INVALID_INVITATION/);
+  });
   await db.close();
 });

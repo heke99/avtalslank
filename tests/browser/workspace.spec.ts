@@ -1,11 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 const ref = "ykddnagtuacflilbchwx",
   org = "11111111-1111-4111-8111-111111111111";
-async function workspace(page: Page) {
-  let envelopes: Array<Record<string, unknown>> = [];
-  let recipients: Array<Record<string, unknown>> = [];
+async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknown>>=[], initialRecipients:Array<Record<string,unknown>>=[]) {
+  let envelopes: Array<Record<string, unknown>> = initialEnvelopes;
+  let recipients: Array<Record<string, unknown>> = initialRecipients;
   let templates: Array<Record<string, unknown>> = [];
   let contacts: Array<Record<string, unknown>> = [];
+  let invitations: Array<Record<string, unknown>> = [];
   await page.addInitScript(
     ({ ref }) => {
       localStorage.setItem(
@@ -40,7 +41,11 @@ async function workspace(page: Page) {
     if (req.method() === "OPTIONS")
       return route.fulfill({ status: 204, headers });
     let value: unknown = [];
-    if (path.endsWith("/prepare"))
+    if(path.endsWith('/team/invitations')){
+      if(req.method()==='POST'){const b=req.postDataJSON();const i={id:'44444444-4444-4444-8444-444444444444',email:b.email,role:b.role,expires_at:new Date(Date.now()+86400000).toISOString()};invitations=[i];value={data:{...i,token:'a'.repeat(64)}};}else value={data:invitations};
+    }else if(path.endsWith('/team/revoke')){invitations=invitations.map(i=>({...i,revoked_at:new Date().toISOString()}));value={data:{revoked:true}};}
+    else if(path.endsWith('/status'))value={data:{workerFresh:false,signingConfigured:false,deliveries:{pending:2}}};
+    else if (path.endsWith("/prepare"))
       value = { data: { envelope: { fields: [] } } };
     else if (path.endsWith("/deliveries")) value = { data: [] };
     else if (path.endsWith("/al_organizations")) {
@@ -302,7 +307,7 @@ test("workspace operations: contacts, team guard and usage without billing", asy
   await expect(page.getByText(/Antalen är inte en faktura/)).toBeVisible();
   await page.getByRole("tab", { name: "Aktivitetslogg", exact: true }).click();
   await expect(
-    page.getByText("organization.created", { exact: true }),
+    page.getByText("Företag skapat", { exact: true }),
   ).toBeVisible();
 });
 
@@ -598,4 +603,46 @@ test("sender can recall a sent envelope through the connected API", async ({
     .click();
   await expect(page.getByText("Avbrutet", { exact: true })).toBeVisible();
   expect(recalled).toBe(true);
+});
+test('team invitation creates fragment-only link and revokes without email claim',async({page})=>{
+ await workspace(page);await page.getByRole('button',{name:'Företag & team',exact:true}).click();await page.getByRole('tab',{name:'Team',exact:true}).click();
+ await page.getByLabel('E-post för inbjudan').fill('new@example.invalid');await page.getByRole('button',{name:'Skapa inbjudningslänk'}).click();
+ await expect(page.getByLabel('Inbjudningslänk – visas bara nu')).toHaveValue(/\/join\/#token=a{64}$/);
+ await page.getByRole('button',{name:'Återkalla inbjudan'}).click();await expect(page.getByText('Återkallad',{exact:true})).toBeVisible();
+});
+test('invitation landing keeps token out of request URL and submits only on acceptance',async({page})=>{
+ await workspace(page);let accepted=false;
+ await page.route('**/functions/v1/avtalslank-api/v1/team/accept',route=>{const b=route.request().postDataJSON();expect(b.token).toBe('b'.repeat(64));accepted=true;return route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:{code:'INVALID_INVITATION'}})});});
+ await page.goto('/join/#token='+'b'.repeat(64));await expect(page.getByRole('heading',{name:'Inbjudan till Avtalslänk'})).toBeVisible();expect(accepted).toBe(false);
+ await page.getByRole('button',{name:'Acceptera inbjudan'}).click();await expect(page.getByRole('alert')).toContainText('annan verifierad e-postadress');expect(accepted).toBe(true);
+});
+test('account reauthentication, password confirmation and global signout use Auth endpoints',async({page})=>{
+ await workspace(page);let reauth=false,changed=false,global=false;
+ await page.route('**/auth/v1/reauthenticate',route=>{reauth=true;return route.fulfill({status:200,contentType:'application/json',body:'{}'});});
+ await page.route('**/auth/v1/user',route=>{if(route.request().method()==='PUT'){const b=route.request().postDataJSON();expect(b.nonce).toBe('123456');expect(b.password).toBe('strong-test-password');changed=true;}return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid'})});});
+ await page.route('**/auth/v1/logout?scope=global',route=>{global=true;return route.fulfill({status:204});});
+ await page.getByRole('button',{name:'Inställningar',exact:true}).click();await page.getByRole('button',{name:'Skicka verifieringskod',exact:true}).click();
+ await expect(page.getByLabel('Verifieringskod från e-post')).toBeVisible();expect(reauth).toBe(true);await page.getByLabel('Verifieringskod från e-post').fill('123456');await page.getByLabel('Nytt lösenord',{exact:true}).fill('strong-test-password');await page.getByLabel('Bekräfta nytt lösenord').fill('different-password');await page.getByRole('button',{name:'Spara nytt lösenord'}).click();await expect(page.getByRole('status')).toContainText('stämmer inte');expect(changed).toBe(false);
+ await page.getByLabel('Bekräfta nytt lösenord').fill('strong-test-password');await page.getByRole('button',{name:'Spara nytt lösenord'}).click();await expect(page.getByRole('status')).toContainText('Lösenordet är ändrat');expect(changed).toBe(true);
+ page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Logga ut från alla enheter'}).click();await expect(page.getByRole('heading',{name:'Logga in',exact:true})).toBeVisible();expect(global).toBe(true);
+});
+test('MFA enrollment sends challenge and code to Supabase, not application database',async({page})=>{
+ await workspace(page);let verified=false;
+ const user={id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors:[{id:'factor-test',factor_type:'totp',status:'verified',friendly_name:'Avtalslänk'}]};
+ await page.route('**/auth/v1/factors',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'factor-test',type:'totp',totp:{secret:'SYNTHETIC-SECRET',qr_code:'<svg xmlns="http://www.w3.org/2000/svg"/>'}})}));
+ await page.route('**/auth/v1/factors/factor-test/challenge',route=>route.fulfill({status:200,contentType:'application/json',body:'{"id":"challenge-test"}'}));
+ await page.route('**/auth/v1/factors/factor-test/verify',route=>{expect(route.request().postDataJSON()).toMatchObject({code:'123456',challenge_id:'challenge-test'});verified=true;const jwt=[Buffer.from('{}').toString('base64url'),Buffer.from(JSON.stringify({sub:user.id,aal:'aal2',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url'),'synthetic'].join('.');return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:jwt,refresh_token:'test-refresh',expires_in:3600,token_type:'bearer',user})});});
+ await page.route('**/auth/v1/user',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(verified?user:{...user,factors:[]})}));
+ await page.getByRole('button',{name:'Inställningar',exact:true}).click();await page.getByRole('button',{name:'Ställ in autentiseringsapp'}).click();await expect(page.getByLabel('Manuell inställningsnyckel')).toHaveValue('SYNTHETIC-SECRET');await page.getByLabel('Kod från autentiseringsappen').fill('123456');await page.getByRole('button',{name:'Verifiera kod'}).click();await expect(page.getByText('Autentiseringsapp är aktiverad.',{exact:false})).toBeVisible();expect(verified).toBe(true);
+});
+test('status filtering and operational health do not claim signing readiness',async({page})=>{
+ await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Filteravtal');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByRole('button',{name:'Avtal',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Filteravtal',exact:true})).toBeVisible();await page.getByLabel('Status',{exact:true}).selectOption('completed');await expect(page.getByRole('button',{name:'Filteravtal',exact:true})).toHaveCount(0);await page.getByLabel('Status',{exact:true}).selectOption('draft');await expect(page.getByRole('button',{name:'Filteravtal',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByText('Dokumentarbetare: Ingen aktuell beredskapssignal')).toBeVisible();await expect(page.getByText('Signeringsutskick: Inte konfigurerat')).toBeVisible();
+});
+test('sender reminder shows queue acceptance and cooldown errors',async({page})=>{
+ const envelopeId='33333333-3333-4333-8333-333333333333',recipientId='55555555-5555-4555-8555-555555555555';
+ await workspace(page,[{id:envelopeId,organization_id:org,title:'Pågående avtal',status:'sent',generation:1,sequential:false,expires_days:14,updated_at:new Date().toISOString()}],[{id:recipientId,name:'Testmottagare',email:'recipient@example.invalid',method:'email_approval',position:1,status:'pending'}]);
+ let count=0;await page.route('**/envelopes/'+envelopeId+'/remind',route=>{expect(route.request().postDataJSON()).toMatchObject({organizationId:org,recipientId});count++;return route.fulfill({status:count===1?200:400,contentType:'application/json',body:JSON.stringify(count===1?{data:{queued:true,count:1}}:{error:{code:'REMINDER_COOLDOWN'}})});});
+ await page.getByRole('button',{name:'Pågående avtal',exact:true}).click();await page.getByRole('button',{name:'Till mottagare'}).click();await page.getByRole('button',{name:'Skicka påminnelse'}).click();await expect(page.getByRole('status')).toContainText('utskickskön');await page.getByRole('button',{name:'Skicka påminnelse'}).click();await expect(page.getByRole('status')).toContainText('30 minuter');
 });
