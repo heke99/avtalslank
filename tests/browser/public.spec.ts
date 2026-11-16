@@ -84,3 +84,21 @@ test('account startup presents recovery when session refresh cannot finish',asyn
  await page.addInitScript(()=>localStorage.setItem('sb-ykddnagtuacflilbchwx-auth-token',JSON.stringify({access_token:'expired-synthetic-token',refresh_token:'synthetic-refresh',token_type:'bearer',expires_at:1,user:{id:'11111111-1111-4111-8111-111111111111',email:'test@example.invalid',aud:'authenticated',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-01-01T00:00:00Z'}})));
  await page.route('**/auth/v1/token**',()=>new Promise(()=>{}));await page.goto('/login');await expect(page.getByRole('heading',{name:'Inloggningen kunde inte läsas in'})).toBeVisible({timeout:18000});await expect(page.getByRole('button',{name:'Försök igen',exact:true})).toBeEnabled();
 });
+test('email entry routes work in a fresh browser with or without a trailing slash', async ({ page }) => {
+ await page.route('**/functions/v1/avtalslank-api/v1/signer/view', async route => {
+  if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'content-type'}});
+  expect(route.request().postDataJSON().token).toBe('f'.repeat(64));
+  return route.fulfill({status:401,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({error:{code:'INVALID_SIGNING_LINK'}})});
+ });
+ for(const path of ['/s','/s/']){
+  await page.goto(path+'#token='+'f'.repeat(64));
+  await expect(page.getByRole('heading',{name:'Signeringslänken kan inte öppnas',exact:true})).toBeVisible();
+ }
+ for(const path of ['/reset-password','/reset-password/']){
+  await page.goto(path);await expect(page.getByRole('heading',{name:'Nytt lösenord',exact:true})).toBeVisible();
+  await expect(page.getByText('Öppna en giltig återställningslänk från din e-post för att fortsätta.')).toBeVisible();
+ }
+ for(const path of ['/join','/join/']){
+  await page.goto(path+'#token='+'e'.repeat(64));await expect(page.getByRole('heading',{name:'Inbjudan till Avtalslänk',exact:true})).toBeVisible();
+ }
+});

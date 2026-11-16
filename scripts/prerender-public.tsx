@@ -11,7 +11,7 @@ const descriptions: Record<string, string> = {
     '/cookies': 'Nödvändig lokal lagring för konto och inbjudningar. Ingen analys- eller annonsspårning i webbappens kod.',
 };
 const escape = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const siteOrigin = new URL(process.env.VITE_SITE_URL ?? 'https://avtalslank.vercel.app').origin;
+const siteOrigin = new URL(process.env.VITE_SITE_URL ?? 'https://www.avtalslank.se').origin;
 for (const path of publicPaths) {
     const title = path === '/' ? 'Avtalslänk – avtal för företag' : pageTitles[path] + ' | Avtalslänk';
     const description = descriptions[path] ?? pageTitles[path] + '. Avtalslänk, en fristående företagstjänst från Trafexa Nordic AB.';

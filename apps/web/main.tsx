@@ -232,8 +232,8 @@ function App() {
     );
   const publicPath=location.pathname.replace(/\/$/,"")||"/";
   if(publicPaths.includes(publicPath as typeof publicPaths[number]) && (publicPath!=="/"||!session)) return <PublicSite path={publicPath} requestedVersion={new URLSearchParams(location.search).get("version")}/>;
-  if (location.pathname.startsWith("/s/")) return <Signer />;
-  if (location.pathname === "/reset-password")
+  if (publicPath === "/s" || publicPath.startsWith("/s/")) return <Signer />;
+  if (publicPath === "/reset-password")
     return <PasswordReset session={session} onError={notify} notice={notice} />;
   if(session?.user.factors?.some(f=>f.status==="verified") && (()=>{try{return JSON.parse(atob(session.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).aal!=="aal2";}catch{return true;}})()) return <div className="auth-layout"><AccountSecurity/></div>;
   if (location.pathname.startsWith("/join")) return <JoinInvitation session={session}><Auth onError={notify} notice={notice}/></JoinInvitation>;
