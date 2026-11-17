@@ -793,7 +793,7 @@ test('signed agreement search uses server cursor and signer metadata',async({pag
 
 test('returning user gets account recovery instead of a permanent registration spinner',async({page})=>{
  await workspace(page);let broken=true;await page.route('**/functions/v1/avtalslank-api/v1/account/registration**',r=>broken?r.fulfill({status:503,json:{error:{code:'REQUEST_FAILED'}}}):r.fulfill({json:{data:{profile:{kind:'company',organizationId:org},hasDraft:false,emailVerified:true}}}));
- await page.goto('/');await expect(page.getByRole('heading',{name:'Kontot kunde inte öppnas'})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toHaveCount(0);broken=false;await page.getByRole('button',{name:'Försök igen',exact:true}).click();await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeVisible();await page.reload();await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeVisible();
+ await page.goto('/');await expect(page.getByRole('heading',{name:'Kontot kunde inte öppnas'})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toHaveCount(0);broken=false;await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeVisible();await page.reload();await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeVisible();
 });
 
 test('account loading times out visibly and can recover without registering a second workspace',async({page})=>{
