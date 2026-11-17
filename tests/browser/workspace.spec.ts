@@ -856,7 +856,7 @@ test('delivery read errors clear after recovery and never imply no deliveries',a
 });
 
 test('a late signing price from an older generation is discarded',async({page})=>{
- await editorWorkspace(page);await page.getByRole('button',{name:'Spara och granska',exact:true}).click();let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);let requested=false;
+ await editorWorkspace(page);await page.getByRole('button',{name:/Granska & skicka/}).click();let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);let requested=false;
  await page.route('**/v1/envelopes/'+editorEnvelopeId+'/quote*',async r=>{requested=true;await wait;return r.fulfill({json:{data:{documents:1,signers:1,unitOre:1000,totalOre:1000,hash:'a'.repeat(64)}}});});
  await page.route('**/v1/envelopes/'+editorEnvelopeId+'/party*',r=>r.fulfill({json:{data:{ok:true}}}));
  await page.getByRole('button',{name:'Hämta aktuellt signeringspris'}).click();await expect.poll(()=>requested).toBe(true);await page.getByText('Företagsuppgifter för Mottagaren',{exact:true}).click();await page.getByRole('button',{name:'Spara mottagarens företag'}).click();await expect(page.getByRole('button',{name:'Hämta aktuellt signeringspris'})).toBeEnabled();const response=page.waitForResponse(r=>r.url().includes('/'+editorEnvelopeId+'/quote'));release();await (await response).finished();await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));await expect(page.getByLabel('Jag godkänner priset för detta utskick')).toHaveCount(0);
