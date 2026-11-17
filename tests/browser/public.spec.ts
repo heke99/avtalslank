@@ -136,3 +136,14 @@ test('published package price refreshes alongside the general document price',as
  let baseOre=10000;await page.route(auth+'/rest/v1/rpc/al_public_document_price',r=>r.fulfill({json:null}));await page.route(auth+'/rest/v1/rpc/al_public_prices',r=>r.fulfill({json:[{code:'package-test',version:1,terms:{name:'Pakettest',description:'',baseOre,documentOre:0,interval:'month',includedDocuments:0,bindingMonths:0,noticeMonths:1}}]}));
  await page.goto('/abonnemang');await expect(page.getByRole('row',{name:/Pakettest/})).toContainText('100,00');baseOre=20000;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.getByRole('row',{name:/Pakettest/})).toContainText('200,00');
 });
+
+ test('signer request deadline releases loading and offers reopening',async({page})=>{
+ await page.clock.install();let requested=false;
+ await page.route('**/v1/signer/view',r=>{if(r.request().method()==='OPTIONS')return r.fulfill({status:204,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'content-type'}});requested=true;return new Promise<void>(()=>{});});
+ await page.goto('/s#token='+'f'.repeat(64));await expect.poll(()=>requested).toBe(true);await expect(page.getByText('Öppnar avtal…')).toBeVisible();await page.clock.fastForward(21000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');await expect(page.getByRole('button',{name:'Öppna länken igen'})).toBeVisible();
+ });
+ test('signer finalization polling never overlaps slow requests',async({page})=>{
+ await page.clock.install();let reads=0;
+ await page.route('**/v1/signer/view',r=>{if(r.request().method()==='OPTIONS')return r.fulfill({status:204,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'content-type'}});reads++;if(reads>1)return new Promise<void>(()=>{});return r.fulfill({headers:{'access-control-allow-origin':'*'},json:{data:{title:'Avtal under behandling',message:'',status:'finalizing',snapshotHash:'a'.repeat(64),expiresAt:'2030-01-01',waiting:false,recipient:{id:'r',name:'Person',method:'email_approval',status:'signed'},fields:[],documents:[]}}});});
+ await page.goto('/s#token='+'f'.repeat(64));await expect(page.getByRole('heading',{name:'Avtal under behandling'})).toBeVisible();await page.clock.fastForward(5000);await expect.poll(()=>reads).toBe(2);await page.clock.fastForward(15000);expect(reads).toBe(2);
+ });

@@ -41,11 +41,17 @@ export default function Signer() {
   const [signedName,setSignedName]=useState(""),[personalNumber,setPersonalNumber]=useState("");
   const decision = useRef<unknown>(null);
   async function request(action: string, body: Record<string, unknown> = {}) {
-    const response = await fetch(apiUrl + "/v1/signer/" + action, {
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),20000);
+    try {
+    const incoming = await fetch(apiUrl + "/v1/signer/" + action, {
       method: "POST",
+      signal: controller.signal,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token, ...body }),
     });
+    // Keep the deadline active through the response body, including PDF downloads.
+    const response=new Response(await incoming.arrayBuffer(),{status:incoming.status,statusText:incoming.statusText,headers:incoming.headers});
     if (!response.ok) {
       const e = await response.json();
       throw Object.assign(Error(e.error?.code ?? "REQUEST_FAILED"), {
@@ -53,6 +59,7 @@ export default function Signer() {
       });
     }
     return response;
+    }catch(e){if(controller.signal.aborted)throw Error("REQUEST_TIMEOUT");throw e;}finally{clearTimeout(timer);}
   }
   const showError = (e: unknown) => {
     const code = (e as Error).message;
@@ -101,7 +108,7 @@ export default function Signer() {
   );
   useEffect(()=>{
     if(!data || data.recipient.status!=="signed" || !["sent","in_progress","finalizing"].includes(data.status))return;
-    let active=true;const timer=setInterval(()=>{request("view").then(r=>r.json()).then(r=>{if(active)setData(r.data);}).catch(()=>{});},5000);
+    let active=true,inFlight=false;const timer=setInterval(()=>{if(inFlight)return;inFlight=true;request("view").then(r=>r.json()).then(r=>{if(active){setData(r.data);setError('');}}).catch(e=>{if(active)showError(e);}).finally(()=>{inFlight=false;});},5000);
     return ()=>{active=false;clearInterval(timer);};
   },[data?.status,data?.recipient.status]);
   async function openDocument(doc: SignerData["documents"][number]) {
@@ -198,9 +205,9 @@ export default function Signer() {
             <section className="panel signer-panel">
               <h1>Signeringslänken kan inte öppnas</h1>
               <p>
-                Kontakta avsändaren för att kontrollera länken. Ingen
-                underskrift har registrerats här.
+                Försök öppna sidan igen. Kontakta avsändaren om länken fortfarande inte fungerar.
               </p>
+              <button className="secondary" onClick={()=>location.reload()}>Öppna länken igen</button>
             </section>
           ) : (
             <section className="panel signer-panel">

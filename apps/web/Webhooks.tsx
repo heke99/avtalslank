@@ -1,4 +1,4 @@
-import {currentSession} from "./session";
+import {bounded,currentSession} from "./session";
 import {accountApi} from "./AccountOperations";
 import {requestJson} from "../../packages/http/src/index";
 import React, { useEffect, useState } from "react";
@@ -9,11 +9,11 @@ export default function Webhooks({ orgId }: { orgId: string }) {
     [error, setError] = useState(""),
     [secret, setSecret] = useState("");
   async function load() {
-    const { data, error } = await supabase
+    const { data, error } = await bounded(supabase
       .from("al_webhook_endpoints")
       .select("id,url,active")
       .eq("organization_id", orgId)
-      .order("created_at");
+      .order("created_at"));
     if (error) throw error;
     setItems(data ?? []);
   }
@@ -53,7 +53,7 @@ export default function Webhooks({ orgId }: { orgId: string }) {
         administratörer kan ändra anslutningen.
       </p>
       <p className="muted">Stäng av anslutningen före byte av hemlighet. Pågående eller osäkra leveranser måste först vara utredda.</p>
-      {error && <p role="alert">{error}</p>}
+      {error && <><p role="alert">{error}</p><button className="secondary" disabled={busy} onClick={()=>{setError('');load().catch(e=>setError(displayError(e)));}}>Hämta webhooklista igen</button></>}
       {items.map((w) => (
         <div className="list-row" key={w.id}>
           <span className="grow">

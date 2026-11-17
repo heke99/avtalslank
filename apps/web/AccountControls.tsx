@@ -1,3 +1,4 @@
+import {bounded} from './session';
 import React, { useEffect, useState, useRef } from 'react';
 import { accountApi } from './AccountOperations';
 import { supabase, displayError } from './client';
@@ -23,7 +24,7 @@ export function SecurityKeys({ orgId }: {
     useEffect(() => { op.run(load); }, [orgId]);
     async function change(body: Record<string, unknown>) { setSecret(''); const v = await accountApi('/v1/security/keys', orgId, body); if (v.key)
         setSecret(v.key); await load(); }
-    return <section className="panel detail-panel account-controls"><h1>API-nycklar</h1><p>Ge varje integration en egen nyckel med de behörigheter den behöver. Endast ägare och administratörer kan hantera nycklar. En skapad nyckel fungerar först när arbetsytan har ett giltigt betalt API-upplägg.</p>{op.error && <p role="alert">{op.error}</p>}
+    return <section className="panel detail-panel account-controls"><h1>API-nycklar</h1><p>Ge varje integration en egen nyckel med de behörigheter den behöver. Endast ägare och administratörer kan hantera nycklar. En skapad nyckel fungerar först när arbetsytan har ett giltigt betalt API-upplägg.</p>{op.error && <><p role="alert">{op.error}</p><button className="secondary" disabled={op.busy} onClick={()=>op.run(load)}>Hämta nyckellistan igen</button></>}
  <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); op.run(() => change({ action: 'create', name: f.get('name'), scopes: f.getAll('scope'), expiryDays: Number(f.get('expiryDays')) })); }}>
  <label>Nyckelnamn<input name="name" required minLength={2} maxLength={80}/></label>
  <label>Giltighetstid<select name="expiryDays" defaultValue="90"><option value="30">30 dagar</option><option value="90">90 dagar</option><option value="365">365 dagar</option><option value="0">Utan slutdatum</option></select></label>
@@ -33,7 +34,7 @@ export function SecurityKeys({ orgId }: {
  <p className="muted">Visar högst 200 senast skapade nycklar. Senast använd uppdateras högst en gång per minut.</p>
  {filterKeys(keys, query, status).map(k => <div className="list-row" key={k.id}><span className="grow"><strong>{k.name}</strong><small>{k.prefix}… · {{ active: 'Aktiv', expired: 'Utgången', revoked: 'Återkallad' }[keyStatus(k)]}</small><small>{k.scopes.join(', ')}</small><small>Giltig till: {k.expires_at ? date(k.expires_at) : 'Utan slutdatum'} · Senast använd: {date(k.last_used_at)}</small></span>{keyStatus(k) === 'active' && <button className="secondary" disabled={op.busy} onClick={() => { if (confirm('Byta nyckeln? Den nuvarande slutar fungera direkt. Behörigheter och slutdatum behålls.'))
         op.run(() => change({ action: 'rotate', id: k.id })); }}>Byt nyckel</button>}{!k.revoked_at && <button className="secondary" disabled={op.busy} onClick={() => { if (confirm('Återkalla denna nyckel?'))
-        op.run(async () => { const r = await supabase.rpc('al_revoke_api_key', { p_org: orgId, p_id: k.id }); if (r.error)
+        op.run(async () => { const r = await bounded(supabase.rpc('al_revoke_api_key', { p_org: orgId, p_id: k.id })); if (r.error)
             throw r.error; await load(); }); }}>Återkalla</button>}</div>)}
  <button className="secondary" disabled={op.busy} onClick={() => { if (confirm('Återkalla alla företagets API-nycklar? Samtliga anslutna integrationer förlorar åtkomst.'))
         op.run(() => change({ action: 'revoke_all' })); }}>Återkalla alla nycklar</button></section>;

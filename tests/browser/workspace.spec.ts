@@ -807,3 +807,18 @@ test('registration data conflicts remain editable instead of being treated as ne
 });
 
  test('server-required MFA opens security controls even when cached user factors are stale',async({page})=>{await workspace(page);await page.route('**/functions/v1/avtalslank-api/v1/account/registration**',r=>r.fulfill({status:403,json:{error:{code:'MFA_REQUIRED'}}}));await page.goto('/');await expect(page.getByRole('heading',{name:'Verifiera din inloggning',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Kontosäkerhet',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toHaveCount(0);});
+
+ test('webhook read timeout shows recovery without creating another endpoint',async({page})=>{
+ await workspace(page);await page.clock.install();let requested=false,hang=true;
+ await page.route('**/rest/v1/al_webhook_endpoints*',r=>{requested=true;if(hang)return new Promise<void>(()=>{});return r.fulfill({json:[{id:'hook',url:'https://example.com/recovered',active:true}]});});
+ await page.getByRole('button',{name:'API & integration',exact:true}).click();await expect.poll(()=>requested).toBe(true);await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');hang=false;await page.getByRole('button',{name:'Hämta webhooklista igen'}).click();await expect(page.getByText('https://example.com/recovered',{exact:true})).toBeVisible();
+ });
+ test('workspace switch clears a one-time API secret and ignores late key responses',async({page})=>{
+ await workspace(page);const second='99999999-9999-4999-8999-999999999999';
+ await page.route('**/rest/v1/al_organizations*',r=>r.fulfill({json:[{id:org,name:'Bolag A'},{id:second,name:'Bolag B'}]}));await page.reload();
+ await page.getByRole('button',{name:'API & integration',exact:true}).click();await page.getByLabel('Nyckelnamn').fill('Första bolagets nyckel');await page.getByRole('button',{name:'Skapa API-nyckel',exact:true}).click();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toBeVisible();
+ let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);let pending=false;
+ await page.route('**/v1/security/keys**',async r=>{if(r.request().method()!=='GET')return r.fallback();if(new URL(r.request().url()).searchParams.get('organizationId')===second)return r.fulfill({json:{data:[]}});pending=true;await wait;return r.fulfill({json:{data:[{id:'late',name:'Sent svar från Bolag A',prefix:'al_test',scopes:[],expires_at:null,revoked_at:null,last_used_at:null}]}});});
+ // Existing key isolation must remain intact while read timeouts change.
+ await page.getByRole('button',{name:'Företag & team',exact:true}).click();await page.getByRole('button',{name:'API & integration',exact:true}).click();await expect.poll(()=>pending).toBe(true);await page.getByLabel('Aktivt företag').selectOption(second);release();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toHaveCount(0);await expect(page.getByText('Sent svar från Bolag A',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Skapa API-nyckel',exact:true})).toBeEnabled();
+ });
