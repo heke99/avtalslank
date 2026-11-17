@@ -14,6 +14,21 @@ const scannerProbe = scanner ? new ScannerProbe(scanner) : null, pdfProbe = new 
 const server = createServer((req, res) => { const r = healthRoute(req.method ?? 'GET', new URL(req.url ?? '/', 'http://worker.invalid').pathname, state, signingConfigured(signingConfig)); res.writeHead(r.status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...(r.status === 405 ? { Allow: 'GET, HEAD' } : {}) }); res.end(req.method === 'HEAD' ? undefined : JSON.stringify(r.body)); });
 server.listen(config.port, '::');
 console.log(JSON.stringify({ event: 'worker_started', configured: state.configured, missing: config.missing, invalid: config.invalid }));
+let lastCleanup=0;
+async function cleanStorage(client: NonNullable<typeof db>) {
+    if(Date.now()-lastCleanup<60000)return;
+    lastCleanup=Date.now();
+    const work=await client.rpc("al_storage_cleanup_batch");
+    if(work.error)throw work.error;
+    for(const bucket of ["al-documents","al-final-documents"]){
+        const paths=(work.data as {bucket:string;path:string}[]).filter(row=>row.bucket===bucket).map(row=>row.path);
+        if(!paths.length)continue;
+        const removal=await client.storage.from(bucket).remove(paths);
+        if(removal.error)throw removal.error;
+        const done=await client.rpc("al_storage_cleanup_done",{p_bucket:bucket,p_paths:paths});
+        if(done.error)throw done.error;
+    }
+}
 async function tick() {
     if (!state.begin())
         return;
@@ -44,6 +59,8 @@ async function tick() {
         if (state.stopping)
             return;
         await signingTick(db, signingConfig, true);
+        try { await cleanStorage(db); }
+        catch { console.error(JSON.stringify({event:"storage_cleanup_failed"})); }
         if (state.stopping)
             return;
         const claimed = await db.rpc('al_claim_document_job');

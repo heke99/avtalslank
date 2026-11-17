@@ -638,8 +638,8 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
       await actor(a);
       template = (
         await one(
-          "select public.al_save_template($1,'Raderbar mall','[]') data",
-          [oa],
+          "select public.al_save_template($1,'Raderbar mall',$2) data",
+          [oa,JSON.stringify([{id:"fixture-field",label:"Kund",recipientRole:"Kund",type:"text",required:true,page:0,x:0.1,y:0.1,width:0.4,height:0.1}])],
         )
       ).data.id;
       await assert.rejects(
@@ -2042,6 +2042,44 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');await one('select public.al_reverse_recorded_payment($1,$2) data',[second.reference,'Current receipt was reversed']);
     await assert.rejects(db.query("select public.al_platform('record_payment',$1,$2)",[oa,second]),/PAYMENT_REVERSED/);await service();await assert.rejects(db.query('select public.al_api_payment_guard($1)',['f'.repeat(64)]),/PAYMENT_REQUIRED/);
     await actor(b);await assert.rejects(db.query('select public.al_reverse_recorded_payment($1,$2)',[second.reference,'Unauthorized reversal attempt']),/PLATFORM_ADMIN_REQUIRED/);
+  });
+  await t.test("audit recovery closes exhausted leases and allows only tenant admins to restart finalization",async()=>{
+    await db.exec("reset role");
+    await db.exec("begin");
+    try {
+      const envelope=await one("select envelope_id from al_private.signing_outbox where organization_id=$1 and kind='finalize' limit 1",[oa]);
+      await db.query("update public.al_envelopes set status='finalizing' where id=$1",[envelope.envelope_id]);
+      await db.query("update al_private.signing_outbox set attempts=5,status='running',lease_until=now()-interval '1 second',lease_token=gen_random_uuid() where envelope_id=$1 and kind='finalize'",[envelope.envelope_id]);
+      await service();
+      await one("select public.al_signing_worker('claim') data");
+      await db.exec("reset role");
+      const state=await one("select status,last_error from al_private.signing_outbox where envelope_id=$1 and kind='finalize'",[envelope.envelope_id]);
+      assert.deepEqual(state,{status:"failed",last_error:"FINALIZATION_ATTEMPTS_EXHAUSTED"});
+      await service();
+      assert.deepEqual((await one("select public.al_retry_signing_finalize($1,$2,$3) data",[a,oa,envelope.envelope_id])).data,{queued:true});
+      await db.exec("reset role");
+      assert.deepEqual(await one("select status,attempts from al_private.signing_outbox where envelope_id=$1 and kind='finalize'",[envelope.envelope_id]),{status:"pending",attempts:0});
+      await service();
+      await assert.rejects(db.query("select public.al_retry_signing_finalize($1,$2,$3)",[b,oa,envelope.envelope_id]),/ACCESS_DENIED/);
+      // Postgres aborts the transaction after the expected rejection.
+    }finally{await db.exec("rollback");}
+  });
+  await t.test("storage reconciliation reserves abandoned artifacts and preserves published references",async()=>{
+    await db.exec("reset role");
+    await db.exec("begin");
+    try {
+      await db.exec("alter table storage.objects add column created_at timestamptz default now()-interval '8 days'");
+      const registered=await one("select storage_path from public.al_documents limit 1");
+      const published=await one("select f.value->>'path' path from al_private.signing_cases c cross join lateral jsonb_array_elements(c.result->'files') f limit 1");
+      const orphanOriginal=`${oa}/${ea}/${crypto.randomUUID()}.pdf`;
+      const orphanFinal=`${oa}/${ea}/${crypto.randomUUID()}/evidence.zip`;
+      await db.query("insert into storage.objects(bucket_id,name) values('al-documents',$1),('al-final-documents',$2)",[orphanOriginal,orphanFinal]);
+      await service();
+      const cleanup=(await one("select public.al_storage_cleanup_batch() data")).data;
+      assert.ok(cleanup.some((item:any)=>item.path===orphanOriginal));
+      assert.ok(cleanup.some((item:any)=>item.path===orphanFinal));
+      assert.ok(!cleanup.some((item:any)=>[registered.storage_path,published.path].includes(item.path)));
+    }finally{await db.exec("rollback");}
   });
   await db.close();
 });

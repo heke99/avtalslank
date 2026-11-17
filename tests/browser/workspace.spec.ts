@@ -87,7 +87,7 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
         archived: false,
       };
       contacts = [value as Record<string, unknown>];
-    } else if (path.endsWith("/al_usage_summary"))
+    } else if (path.endsWith("/al_usage_by_month"))
       value = {
         billing_model: "unconfigured",
         billing_enabled: false,
@@ -113,7 +113,7 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
       path.endsWith("/al_api_keys")
     )
       value = [];
-    else if (path.endsWith("/al_billing_accounts"))
+    else if (path.endsWith("/al_my_payment_status"))
       value = { model: "unconfigured", enabled: false };
     else if (path.endsWith("/al_capabilities"))
       value = ["bankid", "freja", "email_approval", "drawn_signature"].map(
@@ -242,7 +242,7 @@ test("desktop workspace: draft, Freja selection, readiness block, fields, billin
   ).toBeVisible();
   await expect(
     page.getByText(
-      "Kontot har ingen aktiv betalplan. Ingen debitering startar utan en separat godkänd beställning.",
+      "Debitering startar efter en separat godkänd beställning.",
     ),
   ).toBeVisible();
 });

@@ -17,7 +17,7 @@ export async function requestJson<T=any>(url:string,init:RequestInit={},options:
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function parseEnvelopeQuery(search:URLSearchParams){
  const limit=search.has('limit')?Number(search.get('limit')):100;const status=search.get('status');const query=search.get('query')??'';
- if(!Number.isInteger(limit)||limit<1||limit>100||query.length>160||(status!==null&&!['draft','sent','in_progress','completed','declined','expired','cancelled'].includes(status)))throw Error('INVALID_QUERY');
+ if(!Number.isInteger(limit)||limit<1||limit>100||query.length>160||(status!==null&&!['draft','sent','in_progress','finalizing','completed','declined','expired','cancelled'].includes(status)))throw Error('INVALID_QUERY');
  const dates:Record<string,string>={};for(const key of ['from','to']){const value=search.get(key);if(value!==null){if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/.test(value)||!Number.isFinite(Date.parse(value))||Number(value.slice(0,4))<1||new Date(value).toISOString().slice(0,19)!==value.slice(0,19))throw Error('INVALID_QUERY');dates[key]=value;}}
  if(dates.from&&dates.to&&Date.parse(dates.from)>Date.parse(dates.to))throw Error('INVALID_QUERY');
  let cursor:null|{updatedAt:string;id:string}=null;const raw=search.get('cursor');if(raw){try{if(raw.length>1024)throw Error();const v=JSON.parse(atob(raw.replace(/-/g,'+').replace(/_/g,'/')));if(typeof v.updatedAt!=='string'||!Number.isFinite(Date.parse(v.updatedAt))||typeof v.id!=='string'||!uuid.test(v.id))throw Error();cursor={updatedAt:v.updatedAt,id:v.id};}catch{throw Error('INVALID_CURSOR');}}

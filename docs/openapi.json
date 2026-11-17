@@ -78,6 +78,7 @@
                 "draft",
                 "sent",
                 "in_progress",
+                "finalizing",
                 "completed",
                 "declined",
                 "expired",
@@ -335,10 +336,16 @@
                   "generation": {
                     "type": "integer",
                     "minimum": 1
+                  },
+                  "priceHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Hash from the current document price quote"
                   }
                 },
                 "required": [
-                  "generation"
+                  "generation",
+                  "priceHash"
                 ]
               }
             }

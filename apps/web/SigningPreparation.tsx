@@ -374,11 +374,12 @@ export function SigningPreparation({
 export function DeliveryHistory({
   orgId,
   envelopeId,
-  status,
+  status,onRefresh,
 }: {
   orgId: string;
   envelopeId: string;
   status: string;
+  onRefresh:()=>Promise<void>;
 }) {
   const [items, setItems] = useState<any[]>([]),
     [error, setError] = useState("");
@@ -391,11 +392,21 @@ export function DeliveryHistory({
     finally{if(attempt===version.current)setBusy(false);}
   }
   useEffect(()=>{void load();return()=>{version.current++;};},[orgId,envelopeId]);
+  async function recover(item:any,outcome:"retry"|"accepted"){
+    let reference:string|null=null;
+    if(item.status==="reconcile"){
+      reference=window.prompt(outcome==="retry"?"Kontrollera först att leverantören inte tog emot mejlet. Ange referensen för den kontrollen.":"Ange leverantörens bekräftade leveransreferens.");
+      if(!reference?.trim())return;
+    }else if(!window.confirm("Starta om den misslyckade mejlleveransen?"))return;
+    setBusy(true);
+    try{await envelopeApi(orgId,envelopeId,"recover-email",{jobId:item.id,outcome,reference});await load();}
+    catch(e){setError(displayError(e));}finally{setBusy(false);}
+  }
   return (
     <section className="operation-form">
       <h2>Leveranser och slutdokument</h2>
       {error && <p role="alert">{error}</p>}
-      <button className="secondary" disabled={busy} onClick={load}>
+      <button className="secondary" disabled={busy} onClick={async()=>{await load();try{await onRefresh();}catch(e){setError(displayError(e));}}}>
         Uppdatera leveransstatus
       </button>
       {items.length === 0 ? (
@@ -408,6 +419,7 @@ export function DeliveryHistory({
                 invitation: "Signeringsinbjudan",
                 finalize: "Slutdokument",
                 webhook: "Webhook",
+                completion: "Slutmejl",
               }[i.kind as "invitation"] ?? i.kind}
             </span>
             <span>
@@ -421,6 +433,11 @@ export function DeliveryHistory({
                 cancelled: "Avbrutet",
               }[i.status as "pending"] ?? i.status}
             </span>
+            {i.canRecover&&i.kind==="finalize"&&i.status==="failed"&&<button className="secondary" disabled={busy} onClick={async()=>{setBusy(true);try{await envelopeApi(orgId,envelopeId,"retry-finalize",{});await load();}catch(e){setError(displayError(e));}finally{setBusy(false);}}}>Starta om slutdokument</button>}
+            {i.canRecover&&["invitation","completion"].includes(i.kind)&&["reconcile","failed"].includes(i.status)&&<div>
+              {i.status==="reconcile"&&<button className="secondary" disabled={busy} onClick={()=>recover(i,"accepted")}>Registrera bekräftad leverans</button>}
+              <button className="secondary" disabled={busy} onClick={()=>recover(i,"retry")}>{i.status==="reconcile"?"Köa igen efter leveranskontroll":"Köa misslyckad leverans igen"}</button>
+            </div>}
           </div>
         ))
       )}

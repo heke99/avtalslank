@@ -1,3 +1,5 @@
+import {finalPdf,type SigningField} from "../../../packages/signing/src/index.ts";
+import {signingDecisionFits} from "../../../packages/signing/src/decision.ts";
 import { normalizePersonalNumber, forwardedNetwork } from "../../../packages/signing/src/identity.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.110.7";
 import { sha256Hex } from "../../../packages/crypto/src/hash.ts";
@@ -81,16 +83,28 @@ export async function publicSigning(
     action === "decide" &&
     (!payload ||
       typeof payload !== "object" ||
-      Array.isArray(payload) ||
-      JSON.stringify(payload).length > 12000)
+      Array.isArray(payload))
   )
     throw Error("INVALID_DECISION");
   if(action === "decide") {
+    if(!signingDecisionFits(payload))throw Error("DECISION_TOO_LARGE");
+    const hash=await sha256Hex(body.token);
     if(payload.intent === "approve") {
       if(!payload.identity || typeof payload.identity.name !== "string" || payload.identity.name.trim().length<2 || payload.identity.name.length>120)throw Error("INVALID_SIGNER_IDENTITY");
       payload.identity={name:payload.identity.name.trim(),personalNumber:normalizePersonalNumber(String(payload.identity.personalNumber??""))};
+      const view=await call(db,"al_signer_command",{p_hash:hash,p_action:"view"});
+      // Exact replays remain owned by the durable decision handler.
+      if(view.recipient.status==="pending"&&!view.waiting){
+        const fields=(view.fields as SigningField[]).filter(f=>typeof payload.values?.[f.id]==="string"&&payload.values[f.id]!=="");
+        for(const doc of new Set(fields.map(f=>f.documentId))){
+          const source=await call(db,"al_signer_command",{p_hash:hash,p_action:"document",p_payload:{documentId:doc}});
+          const file=await db.storage.from("al-documents").download(source.storage_path);
+          if(file.error)throw file.error;
+          await finalPdf(new Uint8Array(await file.data.arrayBuffer()),source.sha256,fields,payload.values,doc);
+        }
+      }
     }
-    return {data:await call(db,"al_signer_decide",{p_hash:await sha256Hex(body.token),p_payload:payload,p_network:forwardedNetwork(req.headers)})};
+    return {data:await call(db,"al_signer_decide",{p_hash:hash,p_payload:payload,p_network:forwardedNetwork(req.headers)})};
   }
   const data = await call(db, "al_signer_command", {
     p_hash: await sha256Hex(body.token),
@@ -124,7 +138,7 @@ export async function connectedRoute(
   body: Record<string, unknown>,
 ) {
   const match = path.match(
-    /^\/v1\/envelopes\/([a-f0-9-]+)\/(fields|prepare|send|cancel|documents|deliveries|final|quote|party)$/i,
+    /^\/v1\/envelopes\/([a-f0-9-]+)\/(fields|prepare|send|cancel|documents|deliveries|final|quote|party|retry-finalize|recover-email)$/i,
   );
   if (path === "/v1/webhooks" && req.method === "POST") {
     if (!identity.actor || identity.keyHash) throw Error("ADMIN_REQUIRED");
@@ -155,6 +169,15 @@ export async function connectedRoute(
       p_action: action,
       p_payload: payload,
     });
+  if(operation==="retry-finalize"&&req.method==="POST"){
+    if(!identity.actor||identity.keyHash||!identity.organizationId)throw Error("ACCESS_DENIED");
+    return {data:await call(db,"al_retry_signing_finalize",{p_actor:identity.actor,p_org:identity.organizationId,p_envelope:envelopeId})};
+  }
+  if(operation==="recover-email"&&req.method==="POST"){
+    if(!identity.actor||identity.keyHash||!identity.organizationId)throw Error("ACCESS_DENIED");
+    if(!["retry","accepted"].includes(String(body.outcome))||(body.reference!==undefined&&body.reference!==null&&typeof body.reference!=="string"))throw Error("INVALID_BODY");
+    return {data:await call(db,"al_recover_signing_email",{p_actor:identity.actor,p_org:identity.organizationId,p_envelope:envelopeId,p_job:requireId(body.jobId),p_outcome:body.outcome,p_reference:body.reference??null})};
+  }
   if(operation==='quote' && req.method==='GET')return {data:await call(db,'al_document_quote',context)};
   if(operation==='party' && req.method==='POST')return {data:await flow('party',body)};
   if (operation === "documents" && req.method === "POST") {
@@ -177,7 +200,7 @@ export async function connectedRoute(
     await call(db, "al_flow_command", {
       ...context,
       p_action: "authorize_upload",
-      p_payload: {},
+      p_payload: {id:docId,byteSize:bytes.length},
     });
     const org =
       snapshot.documents[0]?.organization_id ?? (await resolveOrg(db, context));

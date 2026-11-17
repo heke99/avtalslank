@@ -4,18 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build && node --import tsx scripts/prerender-public.tsx && node scripts/verify-public-build.mjs",
+    "dev": "node scripts/build-web.mjs --dev",
+    "build": "tsc --noEmit && node scripts/build-web.mjs && node --import tsx scripts/prerender-public.tsx && node scripts/verify-public-build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "verify": "npm run verify:provenance && npm run typecheck:edge && npm run test && npm run build",
-    "preview": "vite preview --host 0.0.0.0",
+    "preview": "node scripts/build-web.mjs --preview",
     "test:browser": "playwright test",
     "worker": "node --import tsx apps/worker/index.ts",
     "verify:provenance": "node scripts/check-provenance.mjs",
     "typecheck:edge": "tsc --noEmit --strict --target ES2022 --lib ES2023,DOM --module ESNext --moduleResolution Bundler --allowImportingTsExtensions --skipLibCheck tests/edge-runtime.d.ts supabase/functions/avtalslank-api/index.ts"
   },
   "dependencies": {
+    "@fontsource/noto-sans": "^5.2.10",
+    "@fontsource/noto-sans-sc": "^5.2.9",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@supabase/supabase-js": "2.110.7",
     "lucide-react": "0.468.0",
     "pdf-lib": "1.17.1",
@@ -29,9 +32,12 @@
     "@types/node": "22.15.3",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
+    "esbuild": "0.28.1",
     "supabase": "2.109.1",
     "tsx": "4.21.0",
-    "typescript": "5.9.3",
-    "vite": "7.3.8"
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "esbuild": "$esbuild"
   }
 }

@@ -61,6 +61,9 @@ export function parseContactCsv(source: string, delimiter: ',' | ';' = ';'): str
     const width = rows[0].length;
     if (rows.some(r => r.length !== width))
         throw Error('CSV_COLUMNS');
+    if(rows[0].length===4&&rows[0][0]==='Namn'&&rows[0][1]==='E-post'&&rows[0][2]==='Företag'&&rows[0][3]===transferMarker){
+        return rows.map((r,i)=>r.slice(0,3).map(value=>i>0&&value.startsWith("'")?value.slice(1):value));
+    }
     return rows;
 }
 export function inspectContactRows(table: string[][], mapping: {
@@ -88,3 +91,24 @@ export function inspectContactRows(table: string[][], mapping: {
     });
 }
 export function contactCsv(rows: ContactInput[]) { return '\uFEFF' + [['Namn', 'E-post', 'Företag'], ...rows.map(c => [c.name, c.email, c.company])].map(row => row.map(csvCell).join(';')).join('\r\n') + '\r\n'; }
+
+const transferMarker='Avtalslänk CSV v1';
+export function contactTransferFiles(rows: ContactInput[]) {
+    const encoder=new TextEncoder();
+    const files: string[]=[];
+    let part: ContactInput[]=[];
+    let bytes=0;
+    const encode=(value:string)=>csvCell(value.startsWith("'")?"'"+value:value);
+    const write=()=>{
+        const headers=['Namn','E-post','Företag',transferMarker].map(csvCell).join(';');
+        files.push('\uFEFF'+[headers,...part.map(c=>[encode(c.name),encode(c.email),encode(c.company),'""'].join(';'))].join('\r\n')+'\r\n');
+        part=[];bytes=0;
+    };
+    for(const contact of rows){
+        const size=encoder.encode(JSON.stringify(contact)).length;
+        if(part.length===200||bytes+size>60000)write();
+        part.push(contact);bytes+=size+1;
+    }
+    if(part.length)write();
+    return files;
+}
