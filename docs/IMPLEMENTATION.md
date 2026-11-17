@@ -124,3 +124,7 @@ Steps1–2: immutable declared identity/server-time/hash evidence; paginated PDF
 ## Företag och privatperson, 2026-11-17
 
 Se [kontoregistrering](work/account-registration.md) för fält, privat profilkoppling, verifiering och det senast signerade avtalets verifierade PDF/ZIP.
+
+## Plattformsadministration och API-betalrätt
+
+Se [plattformsadministration](work/platform-admin.md) för roller, MFA, revisionslogg och betalspärr.

@@ -144,6 +144,7 @@ Deno.serve(async (req: Request) => {
         if(claims.aal!=='aal2')throw Error('MFA_REQUIRED');
       }
     }
+    if(isApi){const gate=await service.rpc('al_api_payment_guard',{p_hash:await sha256Hex(token)});if(gate.error){if(gate.error.message.includes('PAYMENT_REQUIRED'))return response({error:{code:'PAYMENT_REQUIRED',requestId}},402);throw gate.error;}}
     let body: Record<string, unknown> = {};
     if (
       req.method === "POST" &&

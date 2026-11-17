@@ -1,3 +1,4 @@
+import PlatformAdmin,{PlatformAdminLink} from "./PlatformAdmin";
 import {RegistrationFields,RegistrationGate,AccountRegistrationSummary} from "./Registration";
 import {registrationFromForm,type AccountKind} from "../../packages/accounts/src/index";
 import {templateList,validateTemplateFields} from "../../packages/editor/src/index";
@@ -228,7 +229,7 @@ function App() {
   if (loading)
     return (
       <div className="center-screen">
-        <Brand />
+        <Brand /><PlatformAdminLink/>
         <p>Öppnar din arbetsyta…</p>
       </div>
     );
@@ -240,6 +241,7 @@ function App() {
   if(session?.user.factors?.some(f=>f.status==="verified") && (()=>{try{return JSON.parse(atob(session.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).aal!=="aal2";}catch{return true;}})()) return <div className="auth-layout"><AccountSecurity/></div>;
   if (location.pathname.startsWith("/join")) return <JoinInvitation session={session}><Auth onError={notify} notice={notice}/></JoinInvitation>;
   if (!session) return <Auth onError={notify} notice={notice} />;
+  if(publicPath==="/admin")return <PlatformAdmin/>;
   return (
     <RegistrationGate session={session} organizations={orgs} onComplete={async id=>{await loadOrgs();setOrgId(id);}}><div className="shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>

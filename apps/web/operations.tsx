@@ -638,7 +638,7 @@ export function WorkspaceOperations({
                 <select
                   name="role"
                   defaultValue={m.role}
-                  disabled={!admin || busy}
+                  disabled={!admin || busy || (role!=="owner" && ["owner","admin"].includes(m.role))}
                 >
                   {[
                     ["owner", "Ägare"],
@@ -646,7 +646,7 @@ export function WorkspaceOperations({
                     ["sender", "Avsändare"],
                     ["reader", "Läsare"],
                   ].map(([v, l]) => (
-                    <option value={v} key={v}>
+                    <option value={v} key={v} disabled={role!=="owner" && ["owner","admin"].includes(v)}>
                       {l}
                     </option>
                   ))}
@@ -657,12 +657,12 @@ export function WorkspaceOperations({
                   type="checkbox"
                   name="active"
                   defaultChecked={m.active}
-                  disabled={!admin || busy}
+                  disabled={!admin || busy || (role!=="owner" && ["owner","admin"].includes(m.role))}
                 />{" "}
                 Aktiv
               </label>
               {admin && (
-                <button className="secondary" disabled={busy}>
+                <button className="secondary" disabled={busy || (role!=="owner" && ["owner","admin"].includes(m.role))}>
                   Spara roll
                 </button>
               )}

@@ -6,7 +6,7 @@ import {supabase,displayError} from './client';
 export function RegistrationFields({kind,setKind,organizations=[]}:{kind:AccountKind;setKind:(k:AccountKind)=>void;organizations?:Array<{id:string;name:string}>}){
  const [existing,setExisting]=useState('');
  return <fieldset className="registration-fields"><legend>Kontouppgifter</legend>
-  <label>Kontotyp<select value={kind} onChange={e=>{setExisting('');setKind(e.target.value as AccountKind);}}><option value="company">Företag</option><option value="personal">Privatperson</option></select></label>
+  <label>Kontotyp<select aria-label="Kontotyp" value={kind} onChange={e=>{setExisting('');setKind(e.target.value as AccountKind);}}><option value="company">Företag</option><option value="personal">Privatperson</option></select></label>
   {kind==='company'&&organizations.length>0&&<label>Företagets arbetsyta<select name="existingOrganizationId" value={existing} onChange={e=>setExisting(e.target.value)}><option value="">Skapa en ny arbetsyta</option>{organizations.map(o=><option value={o.id} key={o.id}>{o.name}</option>)}</select><small>En befintlig arbetsyta kan endast kopplas om du redan är aktiv medlem.</small></label>}
   {kind==='company'&&!existing&&<><label>Bolagsnamn<input name="companyName" required minLength={2} maxLength={120} autoComplete="organization"/></label><label>Organisationsnummer<input name="registrationNumber" required maxLength={11} inputMode="numeric" placeholder="556855-4884"/></label><label>Företagets e-postadress (valfritt)<input name="companyEmail" type="email" maxLength={254}/></label></>}
   <label>{kind==='company'?'Kontaktpersonens fullständiga namn':'Fullständigt namn'}<input name="fullName" required minLength={2} maxLength={120} autoComplete="name"/></label>

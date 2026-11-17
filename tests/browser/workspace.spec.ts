@@ -765,3 +765,10 @@ test('verified signup completes its private server draft once and selects the re
  await page.goto('/app');await expect(page.getByRole('button',{name:'Översikt',exact:true})).toBeVisible();expect(complete).toBe(1);
  await page.reload();await expect(page.getByRole('button',{name:'Översikt',exact:true})).toBeVisible();expect(complete).toBe(1);
 });
+
+test('platform admin lists companies, audits API suspension and denies ordinary accounts',async({page})=>{
+ await workspace(page);let allowed=true;const commands:any[]=[];
+ await page.route('**/rest/v1/rpc/al_platform',route=>{const p=route.request().postDataJSON();commands.push(p);if(p.p_action==='status')return route.fulfill({json:{admin:allowed,mfa:true}});if(p.p_action==='list')return route.fulfill({json:[{id:org,name:'Bolag A',kind:'company',registration_number:'5568554884',members:1}]});if(p.p_action==='detail')return route.fulfill({json:{organization:{id:org,name:'Bolag A'},members:[],agreements:[],entitlement:null,audit:[]}});return route.fulfill({json:{ok:true}});});
+ await page.goto('/admin');await expect(page.getByRole('heading',{name:'Plattformsadministration'})).toBeVisible();await page.getByRole('button',{name:'Öppna Bolag A'}).click();await page.getByLabel('Anledning till ändring').fill('Supportärende om API-spärr');await page.getByRole('button',{name:'Spärra API',exact:true}).click();await expect.poll(()=>commands.some(p=>p.p_action==='suspend_api'&&p.p_org===org&&p.p_payload.suspended===true)).toBe(true);
+ allowed=false;await page.reload();await expect(page.getByText('Du saknar plattformsbehörighet.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spärra API',exact:true})).toHaveCount(0);
+});

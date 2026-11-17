@@ -8,7 +8,7 @@ test('public hero, plans and legal navigation with no optional tracking or stora
     await expect(page.locator('#public-main')).toHaveCSS('margin-left','0px');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Avtal, dokument\s*och mottagare\./);
     await expect(page.getByText('En tjänst från Trafexa Nordic AB.', { exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Skapa konto' })).toHaveAttribute('href', '/signup');
+    await expect(page.locator('#public-main').getByRole('link', { name: 'Skapa konto' })).toHaveAttribute('href', '/signup');
     await page.getByRole('button', { name: 'Cookieinställningar', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Inte i bruk');
     await expect(page.getByRole('button', { name: 'Stäng inställningar' })).toBeFocused();

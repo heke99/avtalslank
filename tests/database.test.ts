@@ -57,6 +57,8 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
       assert.notEqual(ea, eb);
     },
   );
+  await db.exec('reset role');
+  await db.query("insert into al_private.api_entitlements(organization_id,model,paid_until,payment_reference) values($1,'subscription',now()+interval '1 day','fixture-a'),($2,'subscription',now()+interval '1 day','fixture-b')",[oa!,ob!]);
   await t.test("RLS denies reads/writes across organizations", async () => {
     await actor(a);
     assert.equal(
@@ -1932,5 +1934,23 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await db.exec('reset role');const org=await one('select * from public.al_organizations where id=$1',[result.organizationId]);assert.equal(org.kind,'personal');assert.equal(org.registration_number,null);assert.ok(!JSON.stringify(org).includes('199001010017'));assert.equal((await one('select personal_number from al_private.account_profiles where user_id=$1',[user])).personal_number,'199001010017');
     await assert.rejects(db.query("insert into auth.users(id,email,raw_user_meta_data) values($1,'invalid-registration@example.invalid',$2)",[crypto.randomUUID(),{registration:{...payload,personalNumber:'199001010018'}}]),/INVALID_REGISTRATION/);
   });
+
+  await t.test('platform requires explicit grant and AAL2; payments gate every key and cached replay',async()=>{
+    await actor(a);await assert.rejects(db.query("select public.al_platform('list')"),/PLATFORM_ADMIN_REQUIRED/);
+    await db.exec('reset role');await db.query('insert into al_private.platform_admins(user_id) values($1)',[a]);
+    await actor(a);await assert.rejects(db.query("select public.al_platform('list')"),/MFA_REQUIRED/);
+    await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');
+    assert.ok(Array.isArray((await one("select public.al_platform('list') data")).data));
+    await assert.rejects(db.query("select public.al_platform('member',$1,$2)",[oa,{userId:a,role:'reader',active:true,reason:'Test last owner protection'}]),/LAST_OWNER/);
+    await assert.rejects(db.query("select public.al_platform('record_payment',$1,$2)",[oa,{model:'per_document',reference:'not-paid',paidUntil:new Date(Date.now()+86400000).toISOString(),reason:'Test unsupported billing model'}]),/INVALID_PAYMENT/);
+    await one("select public.al_platform('suspend_api',$1,$2)",[oa,{suspended:true,reason:'Test payment enforcement'}]);
+    await db.exec('reset role');const hash='f'.repeat(64);await db.query("insert into public.al_api_keys(organization_id,name,prefix,token_hash,scopes,created_by) values($1,'payment-test','al_test',$2,array['envelopes:read'],$3)",[oa,hash,a]);
+    await actor(a,'service_role');await assert.rejects(db.query('select public.al_api_payment_guard($1)',[hash]),/PAYMENT_REQUIRED/);
+    await assert.rejects(db.query("select public.al_api_dispatch($1,'list_envelopes','{}',null)",[hash]),/PAYMENT_REQUIRED/);
+    await db.exec('reset role');await db.query('update al_private.api_entitlements set suspended=false where organization_id=$1',[oa]);
+    await actor(a,'service_role');await db.query('select public.al_api_payment_guard($1)',[hash]);
+    await db.exec('reset role');await db.query("update al_private.api_entitlements set paid_until=now()-interval '1 second' where organization_id=$1",[oa]);await actor(a,'service_role');await assert.rejects(db.query('select public.al_api_payment_guard($1)',[hash]),/PAYMENT_REQUIRED/);
+  });
+
   await db.close();
 });
