@@ -11,10 +11,11 @@ const uuid = (v: unknown) => { if (typeof v !== 'string' || !/^[a-f0-9]{8}-[a-f0
 async function rpc(db: SupabaseClient, name: string, args: Record<string, unknown>) { const r = await db.rpc(name, args); if (r.error)
     throw r.error; return r.data; }
 export async function securityRoute(req: Request, path: string, db: SupabaseClient, identity: Identity, body: Record<string, unknown>) {
-    if (!['/v1/account/legal', '/v1/plan-preference', '/v1/security/keys', '/v1/security/webhook-rotate'].includes(path))
+    if (!['/v1/account/registration', '/v1/account/legal', '/v1/plan-preference', '/v1/security/keys', '/v1/security/webhook-rotate'].includes(path))
         return null;
     if (!identity.actor || identity.keyHash)
         throw Error('AUTH_REQUIRED');
+    if(path === '/v1/account/registration' && ['GET','POST'].includes(req.method))return {data:await rpc(db,'al_registration',{p_actor:identity.actor,p_action:req.method==='GET'?'read':'complete',p_payload:req.method==='GET'?{}:body.registration??{}})};
     if (path === '/v1/account/legal') {
         if (!['GET', 'POST'].includes(req.method))
             return null;

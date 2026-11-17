@@ -120,3 +120,7 @@ Existing Railway environment is now production; dedicated keys provisioned by op
 
 ## Signer evidence and completion iteration
 Steps1–2: immutable declared identity/server-time/hash evidence; paginated PDF receipt; verified archive/checksums; participant evidence download; transactional completion email; recipient status polling and final downloads. No retroactive edits to signed documents, no identity verification claims from personal-number checksum, no fabricated client IP. Local103 tests and build/type gates pass. [Work and evidence](work/signer-receipt-and-completion.md).
+
+## Företag och privatperson, 2026-11-17
+
+Se [kontoregistrering](work/account-registration.md) för fält, privat profilkoppling, verifiering och det senast signerade avtalets verifierade PDF/ZIP.

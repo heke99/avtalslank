@@ -8,7 +8,7 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
   const db = new PGlite();
   await db.waitReady;
   await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create schema storage;
- create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz default now());grant usage on schema auth,storage to anon,authenticated,service_role;
+ create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz default now(),raw_user_meta_data jsonb default '{}');grant usage on schema auth,storage to anon,authenticated,service_role;
  create table auth.mfa_factors(id uuid primary key default gen_random_uuid(),user_id uuid,status text);
  create function auth.uid() returns uuid language sql stable as $$select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid$$;
  `);
@@ -1905,6 +1905,32 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await assert.rejects(contactsRoute(new Request('https://avtalslank.test/v1/contacts/imports'),'/v1/contacts/imports',client,identity,{}),/SCOPE_DENIED/);
     await assert.rejects(contactsRoute(req,'/v1/contacts/imports',client,{actor:a,keyHash:null,organizationId:oa},{...body,requestId:crypto.randomUUID(),rows:[{name:'Injected',email:'inject@example.invalid',organizationId:ob}]}),/INVALID_CONTACT_IMPORT/);
     await actor(a);await db.query('select public.al_revoke_api_key($1,$2)',[oa,key]);await assert.rejects(contactsRoute(req,'/v1/contacts/imports',client,identity,body),/INVALID_API_KEY/);
+  });
+  await t.test('registration intent stays private until verified email and company provisioning is idempotent',async()=>{
+    await db.exec('reset role');const user=crypto.randomUUID();const payload={kind:'company',fullName:'Test Contact',companyName:'Registration Test AB',registrationNumber:'559999-9991',companyEmail:'office@example.invalid',phone:'010000000',role:'owner',organizationId:ob};
+    await db.query("insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values($1,'registration-company@example.invalid',null,$2)",[user,{registration:payload,plan_interest:'api'}]);
+    const stored=await one('select raw_user_meta_data from auth.users where id=$1',[user]);assert.ok(!stored.raw_user_meta_data.registration);assert.equal(stored.raw_user_meta_data.plan_interest,'api');
+    assert.equal((await one('select count(*)::int n from public.al_memberships where user_id=$1',[user])).n,0);
+    await service();const reg=async(action='read',data={})=>(await one('select public.al_registration($1,$2,$3) data',[user,action,data])).data;
+    assert.equal((await reg()).hasDraft,true);await assert.rejects(reg('complete'),/EMAIL_VERIFICATION_REQUIRED/);
+    await db.exec('reset role');await db.query('update auth.users set email_confirmed_at=now() where id=$1',[user]);await service();
+    const first=await reg('complete');assert.equal(first.kind,'company');assert.equal(first.email,'registration-company@example.invalid');assert.notEqual(first.organizationId,ob);assert.deepEqual(await reg('complete',{kind:'personal'}),first);
+    await db.exec('reset role');const org=await one('select * from public.al_organizations where id=$1',[first.organizationId]);assert.equal(org.name,'Registration Test AB');assert.equal(org.registration_number,'5599999991');assert.equal(org.kind,'company');
+    assert.equal((await one('select count(*)::int n from public.al_memberships where user_id=$1',[user])).n,1);assert.equal((await one('select enabled from public.al_billing_accounts where organization_id=$1',[first.organizationId])).enabled,false);assert.equal((await one('select count(*)::int n from al_private.registration_drafts where user_id=$1',[user])).n,0);
+    const other=crypto.randomUUID();await db.query("insert into auth.users(id,email) values($1,'registration-other@example.invalid')",[other]);await service();
+    await assert.rejects(db.query("select public.al_registration($1,'complete',$2)",[other,{...payload,existingOrganizationId:first.organizationId}]),/ACCESS_DENIED/);
+    await assert.rejects(db.query("select public.al_registration($1,'complete',$2)",[other,payload]),/COMPANY_ALREADY_REGISTERED/);
+    await actor(other);assert.equal((await db.query('select id from public.al_organizations where id=$1',[first.organizationId])).rows.length,0);
+    await db.exec('reset role');await db.query("insert into public.al_memberships(organization_id,user_id,role,active) values($1,$2,'reader',true)",[first.organizationId,other]);await service();const joined=(await one("select public.al_registration($1,'complete',$2) data",[other,payload])).data;assert.equal(joined.organizationId,first.organizationId);await db.exec('reset role');assert.equal((await one('select role from public.al_memberships where user_id=$1 and organization_id=$2',[other,first.organizationId])).role,'reader');await actor(other);await assert.rejects(db.query('select * from al_private.account_profiles'),/permission denied/);await assert.rejects(db.query("select public.al_registration($1,'read')",[user]),/permission denied/);
+  });
+  await t.test('private signup creates only its own workspace and keeps personal number out of memberships and JWT metadata',async()=>{
+    await db.exec('reset role');const user=crypto.randomUUID();const payload={kind:'personal',fullName:'Private Test',personalNumber:'199001010017',phone:'010000001',companyName:'Ignored',registrationNumber:'5568554884'};
+    await db.query("insert into auth.users(id,email,raw_user_meta_data) values($1,'registration-private@example.invalid',$2)",[user,{registration:payload}]);
+    assert.ok(!JSON.stringify((await one('select raw_user_meta_data from auth.users where id=$1',[user])).raw_user_meta_data).includes('199001010017'));
+    await service();const result=(await one("select public.al_registration($1,'complete') data",[user])).data;assert.equal(result.kind,'personal');assert.ok(!JSON.stringify(result).includes('199001010017'));
+    await assert.rejects(db.query("select public.al_team_command($1,$2,'create',$3)",[user,result.organizationId,{email:'not-invited@example.invalid',role:'reader',tokenHash:'f'.repeat(64)}]),/COMPANY_ACCOUNT_REQUIRED/);
+    await db.exec('reset role');const org=await one('select * from public.al_organizations where id=$1',[result.organizationId]);assert.equal(org.kind,'personal');assert.equal(org.registration_number,null);assert.ok(!JSON.stringify(org).includes('199001010017'));assert.equal((await one('select personal_number from al_private.account_profiles where user_id=$1',[user])).personal_number,'199001010017');
+    await assert.rejects(db.query("insert into auth.users(id,email,raw_user_meta_data) values($1,'invalid-registration@example.invalid',$2)",[crypto.randomUUID(),{registration:{...payload,personalNumber:'199001010018'}}]),/INVALID_REGISTRATION/);
   });
   await db.close();
 });

@@ -17,7 +17,9 @@ export const apiUrl =
   import.meta.env.VITE_API_URL || `${url}/functions/v1/avtalslank-api`;
 export const friendlyError = (message: string) =>
   ({
-    IDEMPOTENCY_CONFLICT: "Referensen har redan använts för ett annat innehåll. Läs in filen igen för en ny import. Kontrollera historiken först om utfallet var osäkert.",
+    COMPANY_ALREADY_REGISTERED: "Företaget har redan en arbetsyta. Be en befintlig ägare bjuda in dig.",
+    INVALID_REGISTRATION: "Kontrollera kontotyp, namn och organisationsnummer eller personnummer. Alla obligatoriska uppgifter måste vara korrekt ifyllda.",
+    COMPANY_ACCOUNT_REQUIRED: "Den här funktionen kräver en företagsarbetsyta.",    IDEMPOTENCY_CONFLICT: "Referensen har redan använts för ett annat innehåll. Läs in filen igen för en ny import. Kontrollera historiken först om utfallet var osäkert.",
     CONTACT_IMPORT_LIMIT: "Importera 1–200 kontakter per anrop och använd en giltig importreferens.",
     INVALID_CONTACT_IMPORT: "Kontrollera importens namn, e-postadresser och företag. Inga kontakter har sparats.",
     DUPLICATE_IMPORT_EMAIL: "Samma e-postadress finns flera gånger i importen. Inga kontakter har sparats.",

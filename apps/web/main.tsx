@@ -1,3 +1,5 @@
+import {RegistrationFields,RegistrationGate,AccountRegistrationSummary} from "./Registration";
+import {registrationFromForm,type AccountKind} from "../../packages/accounts/src/index";
 import {templateList,validateTemplateFields} from "../../packages/editor/src/index";
 import {SecurityKeys,LegalAccount,PlanPreference} from "./AccountControls";
 import GettingStarted from "./GettingStarted";
@@ -81,7 +83,7 @@ type Envelope = {
   generation: number;
   updated_at: string;
 };
-type Org = { id: string; name: string; registration_number: string | null };
+type Org = { id: string; name: string; registration_number: string | null;kind?:"company"|"personal" };
 type Recipient = {
   id: string;
   name: string;
@@ -160,7 +162,7 @@ function App() {
   async function loadOrgs() {
     const { data, error } = await supabase
       .from("al_organizations")
-      .select("id,name,registration_number")
+      .select("id,name,registration_number,kind")
       .order("created_at");
     if (error) throw error;
     setOrgs(data ?? []);
@@ -220,7 +222,7 @@ function App() {
     ["templates", "Mallar", Layers],
     ["developers", "API & integration", Code2],
     ["settings", "Inställningar", Settings],
-    ["workspace", "Företag & team", Users],
+    ["workspace", org?.kind === "personal" ? "Min arbetsyta" : "Företag & team", Users],
   ] as const;
   if(sessionError)return <div className="center-screen"><Brand/><h1>Inloggningen kunde inte läsas in</h1><p>Kontrollera anslutningen och läs in sidan igen.</p><button className="primary" onClick={()=>location.reload()}>Försök igen</button><a href="/hjalp">Kontakta support</a></div>;
   if (loading)
@@ -239,7 +241,7 @@ function App() {
   if (location.pathname.startsWith("/join")) return <JoinInvitation session={session}><Auth onError={notify} notice={notice}/></JoinInvitation>;
   if (!session) return <Auth onError={notify} notice={notice} />;
   return (
-    <div className="shell">
+    <RegistrationGate session={session} organizations={orgs} onComplete={async id=>{await loadOrgs();setOrgId(id);}}><div className="shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
         <Brand />
         <button className="organization" onClick={() => setModal("org")}>
@@ -584,7 +586,7 @@ function App() {
                   <Webhooks key={orgId} orgId={orgId} />
                 </>
               )}
-              {view === "workspace" && (
+              {view === "workspace" && org.kind !== "personal" && (
                 <WorkspaceOperations
                   key={orgId}
                   orgId={orgId}
@@ -593,6 +595,7 @@ function App() {
                   reload={reload}
                 />
               )}
+              {view === "workspace" && org.kind === "personal" && <section className="panel detail-panel"><h2>Din privata arbetsyta</h2><p>Här samlas dina egna avtal. Undertecknare bjuds in till respektive avtal, inte som medlemmar i arbetsytan.</p><AccountRegistrationSummary/></section>}
               {view === "settings" && (
                 <SettingsView
                   org={org}
@@ -683,7 +686,7 @@ function App() {
           </form>
         </Modal>
       )}
-    </div>
+    </div></RegistrationGate>
   );
 }
 function Brand() {
@@ -884,6 +887,7 @@ function Auth({
   const [mode, setMode] = useState<"login" | "register" | "reset">(location.pathname==="/signup"?"register":"login"),
     [busy, setBusy] = useState(false),
     [success, setSuccess] = useState(""),
+    [accountKind,setAccountKind]=useState<AccountKind>('company'),
     [plan,setPlan]=useState(selectedPlan(new URLSearchParams(location.search).get("plan"))??"");
   return (
     <div className="auth-layout">
@@ -902,7 +906,7 @@ function Auth({
             {mode === "login"
               ? "Ange din e-postadress och ditt lösenord."
               : mode === "register"
-                ? "Registrera ett konto för att hantera företagets avtal."
+                ? "Välj företag eller privatperson och fyll i dina kontouppgifter."
                 : "Vi skickar en länk till din e-postadress."}
           </p>
           {!configured && (
@@ -939,7 +943,7 @@ function Auth({
                       ? await supabase.auth.signUp({
                           email,
                           password,
-                          options: { emailRedirectTo: location.origin+(location.pathname.startsWith("/join")?"/join/":""),data:signupMetadata(plan,f.get("terms")==="on") },
+                          options: { emailRedirectTo: location.origin+(location.pathname.startsWith("/join")?"/join/":""),data:{...signupMetadata(accountKind==="company"?plan:null,f.get("terms")==="on"),registration:registrationFromForm(f,accountKind)} },
                         })
                       : await supabase.auth.resetPasswordForEmail(email, {
                           redirectTo: location.origin + "/reset-password",
@@ -958,6 +962,7 @@ function Auth({
               }
             }}
           >
+            {mode === "register" && <RegistrationFields kind={accountKind} setKind={setAccountKind}/>}
             <label>
               E-postadress
               <div className="input-icon">
@@ -965,7 +970,7 @@ function Auth({
                 <input
                   name="email"
                   type="email"
-                  placeholder="du@foretag.se"
+                  placeholder="din@epost.se"
                   required
                   autoComplete="email"
                 />
@@ -992,9 +997,9 @@ function Auth({
               </label>
             )}
             {mode==="register"&&<>
-              <label>Önskat upplägg<select value={plan} onChange={e=>setPlan(e.target.value)} aria-label="Önskat upplägg"><option value="">Jag väljer senare</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-              <p className="auth-plan">Planvalet är ett önskemål. Inget betalt abonnemang, ingen bindningstid och ingen debitering startar vid registrering.</p>
-              <div className="auth-legal"><label><input name="terms" type="checkbox" required/><span>Jag företräder ett företag och accepterar <a href={"/villkor?version="+legalVersion} target="_blank" rel="noopener">allmänna villkor för kontot</a> (version {legalVersion}).</span></label><p>Så använder vi dina uppgifter: <a href="/integritet" target="_blank" rel="noopener">integritetspolicy</a>. Detta är information, inte ett samtycke till marknadsföring.</p></div>
+              {accountKind === "company" && <><label>Önskat upplägg<select value={plan} onChange={e=>setPlan(e.target.value)} aria-label="Önskat upplägg"><option value="">Jag väljer senare</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+              <p className="auth-plan">Planvalet är ett önskemål. Inget betalt abonnemang, ingen bindningstid och ingen debitering startar vid registrering.</p></>}
+              <div className="auth-legal"><label><input name="terms" type="checkbox" required/><span>{accountKind === "company" ? "Jag företräder företaget och accepterar" : "Jag accepterar"} <a href={"/villkor?version="+legalVersion} target="_blank" rel="noopener">allmänna villkor för kontot</a> (version {legalVersion}).</span></label><p>Så använder vi dina uppgifter: <a href="/integritet" target="_blank" rel="noopener">integritetspolicy</a>. Detta är information, inte ett samtycke till marknadsföring.</p></div>
             </>}
             <button className="primary full" disabled={busy || !configured}>
               {busy
@@ -1810,17 +1815,18 @@ function SettingsView({
   }, [org.id]);
   return (
     <div className="settings-grid">
+      <AccountRegistrationSummary/>
       <AccountSecurity/>
       <LegalAccount/>
       <PlanPreference key={"plan-"+org.id} orgId={org.id}/>
       <OperationalStatus key={org.id} orgId={org.id}/>
       <section className="panel detail-panel">
-        <h2>Företag</h2>
+        <h2>{org.kind === 'personal' ? 'Privat arbetsyta' : 'Företag'}</h2>
         <dl>
-          <dt>Företagsnamn</dt>
+          <dt>{org.kind === 'personal' ? 'Namn' : 'Företagsnamn'}</dt>
           <dd>{org.name}</dd>
-          <dt>Organisationsnummer</dt>
-          <dd>{org.registration_number || "Inte angivet"}</dd>
+          <dt>{org.kind === 'personal' ? 'Kontotyp' : 'Organisationsnummer'}</dt>
+          <dd>{org.kind === 'personal' ? 'Privatperson' : org.registration_number || "Inte angivet"}</dd>
           <dt>Tjänsteleverantör</dt>
           <dd>Trafexa Nordic AB · 556855-4884</dd>
         </dl>

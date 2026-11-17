@@ -1,0 +1,28 @@
+import React,{useEffect,useState} from 'react';
+import type {Session} from '@supabase/supabase-js';
+import {registrationFromForm,type AccountKind} from '../../packages/accounts/src/index';
+import {accountApi} from './AccountOperations';
+import {supabase,displayError} from './client';
+export function RegistrationFields({kind,setKind,organizations=[]}:{kind:AccountKind;setKind:(k:AccountKind)=>void;organizations?:Array<{id:string;name:string}>}){
+ const [existing,setExisting]=useState('');
+ return <fieldset className="registration-fields"><legend>Kontouppgifter</legend>
+  <label>Kontotyp<select value={kind} onChange={e=>{setExisting('');setKind(e.target.value as AccountKind);}}><option value="company">Företag</option><option value="personal">Privatperson</option></select></label>
+  {kind==='company'&&organizations.length>0&&<label>Företagets arbetsyta<select name="existingOrganizationId" value={existing} onChange={e=>setExisting(e.target.value)}><option value="">Skapa en ny arbetsyta</option>{organizations.map(o=><option value={o.id} key={o.id}>{o.name}</option>)}</select><small>En befintlig arbetsyta kan endast kopplas om du redan är aktiv medlem.</small></label>}
+  {kind==='company'&&!existing&&<><label>Bolagsnamn<input name="companyName" required minLength={2} maxLength={120} autoComplete="organization"/></label><label>Organisationsnummer<input name="registrationNumber" required maxLength={11} inputMode="numeric" placeholder="556855-4884"/></label><label>Företagets e-postadress (valfritt)<input name="companyEmail" type="email" maxLength={254}/></label></>}
+  <label>{kind==='company'?'Kontaktpersonens fullständiga namn':'Fullständigt namn'}<input name="fullName" required minLength={2} maxLength={120} autoComplete="name"/></label>
+  {kind==='personal'&&<label>Personnummer (ÅÅÅÅMMDDNNNN)<input name="personalNumber" required inputMode="numeric" maxLength={13}/><small>Uppgiften anges av dig. Kontot verifierar din e-postadress, inte din identitet med e-legitimation.</small></label>}
+  <label>Telefonnummer (valfritt)<input name="phone" type="tel" autoComplete="tel" maxLength={40}/></label>
+ </fieldset>;
+}
+export function RegistrationGate({session,organizations,onComplete,children}:{session:Session;organizations:Array<{id:string;name:string;kind?:string}>;onComplete:(organizationId:string)=>Promise<void>;children:React.ReactNode}){
+ const [state,setState]=useState<'loading'|'ready'|'form'|'error'>('loading'),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[kind,setKind]=useState<AccountKind>('company');
+ async function load(){setState('loading');setMessage('');try{const r=await accountApi('/v1/account/registration',null);if(r.profile){setState('ready');return;}if(r.hasDraft&&r.emailVerified){const profile=await accountApi('/v1/account/registration',null,{});await onComplete(profile.organizationId);setState('ready');return;}setState('form');}catch(e){setMessage(displayError(e));setState('form');}}
+ useEffect(()=>{let active=true;setState('loading');accountApi('/v1/account/registration',null).then(async r=>{if(!active)return;if(r.profile){setState('ready');return;}if(r.hasDraft&&r.emailVerified){const profile=await accountApi('/v1/account/registration',null,{});if(!active)return;await onComplete(profile.organizationId);setState('ready');}else setState('form');}).catch(e=>{if(active){setMessage(displayError(e));setState('form');}});return()=>{active=false;};},[session.user.id]);
+ if(state==='ready')return <>{children}</>;
+ return <main className="auth-layout"><section className="auth-main"><a className="public-brand" href="/">avtalslänk</a><div className="auth-form"><h1>{state==='loading'?'Kopplar ditt konto…':'Komplettera ditt konto'}</h1><p>Inloggad som {session.user.email}. Kontots e-postadress används som kontaktadress.</p>{message&&<p role="alert" className="alert">{message}</p>}{state==='error'&&<button className="primary" onClick={load}>Försök igen</button>}{state==='form'&&<form onSubmit={async e=>{e.preventDefault();setBusy(true);setMessage('');try{const registration=registrationFromForm(new FormData(e.currentTarget),kind);const profile=await accountApi('/v1/account/registration',null,{registration});await onComplete(profile.organizationId);setState('ready');}catch(err){setMessage(displayError(err));}finally{setBusy(false);}}}><RegistrationFields kind={kind} setKind={setKind} organizations={organizations.filter(o=>o.kind!=='personal')}/><p>Verifiera din e-postadress innan arbetsytan skapas. Uppgifterna ger inte åtkomst till ett annat företags konto.</p><button className="primary full" disabled={busy}>Spara kontouppgifter</button></form>}<button className="text-button" onClick={()=>supabase.auth.signOut()}>Logga ut</button></div></section></main>;
+}
+export function AccountRegistrationSummary(){
+ const [profile,setProfile]=useState<any>(null),[error,setError]=useState('');
+ useEffect(()=>{let active=true;accountApi('/v1/account/registration',null).then(r=>{if(active)setProfile(r.profile);}).catch(e=>{if(active)setError(displayError(e));});return()=>{active=false;};},[]);
+ return <section className="panel detail-panel"><h2>Min kontoprofil</h2>{error&&<p role="alert">{error}</p>}{profile&&<dl><dt>Kontotyp</dt><dd>{profile.kind==='company'?'Företagskontakt':'Privatperson'}</dd><dt>Namn</dt><dd>{profile.fullName}</dd><dt>Kontots e-postadress</dt><dd>{profile.email}</dd>{profile.companyEmail&&<><dt>Företagets e-postadress</dt><dd>{profile.companyEmail}</dd></>}{profile.personalNumberMasked&&<><dt>Personnummer</dt><dd>{profile.personalNumberMasked}</dd></>}{profile.phone&&<><dt>Telefon</dt><dd>{profile.phone}</dd></>}</dl>}</section>;
+}

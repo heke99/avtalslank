@@ -45,11 +45,12 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
     if (req.method() === "OPTIONS")
       return route.fulfill({ status: 204, headers });
     let value: unknown = [];
-    if(path.endsWith('/contacts/imports')){
+    if(path.endsWith('/account/registration')) value={data:{profile:{kind:'company',fullName:'Testperson',organizationId:org,email:'test@example.invalid'},hasDraft:false,emailVerified:true}};
+    else if(path.endsWith('/contacts/imports')){
       if(req.method()==='POST'){const b=req.postDataJSON();let receipt=contactImports.find(i=>i.requestId===b.requestId);if(!receipt){let created=0,skipped=0;for(const row of b.rows){if(contacts.some(c=>c.email===row.email))skipped++;else{contacts.push({...row,id:crypto.randomUUID(),version:1,archived:false});created++;}}receipt={requestId:b.requestId,createdAt:new Date().toISOString(),result:{requestId:b.requestId,total:b.rows.length,created,skipped,archivedSkipped:0}};contactImports.unshift(receipt);}value={data:receipt.result};}else value={data:contactImports};
     }else if(path.endsWith('/security/keys')){
       if(req.method()==='POST'){const b=req.postDataJSON();if(b.action==='revoke_all'){keys=keys.map(k=>({...k,revoked_at:new Date().toISOString()}));value={data:{count:keys.length}};}else{const old=keys.find(k=>k.id===b.id);if(old)old.revoked_at=new Date().toISOString();const k={id:crypto.randomUUID(),name:old?.name??b.name,prefix:'al_live_0123abcd',scopes:old?.scopes??b.scopes,expires_at:old?.expires_at??new Date(Date.now()+b.expiryDays*86400000).toISOString(),last_used_at:null,revoked_at:null,created_at:new Date().toISOString()};keys=[k,...keys];value={data:{...k,key:'al_live_ui-only-test-key'}};}}else value={data:keys};
-    }else if(path.endsWith('/account/legal')){if(req.method()==='POST')legalAccepted=true;value={data:{document:{version:'2026-11-16.2',sha256:'a'.repeat(64),url:'/legal/2026-11-16.2/villkor.html'},accepted:legalAccepted,acceptedAt:legalAccepted?'2026-11-16T12:00:00Z':null,history:legalAccepted?[{version:'2026-11-16.2',sha256:'a'.repeat(64),acceptedAt:'2026-11-16T12:00:00Z'}]:[]}};
+    }else if(path.endsWith('/account/legal')){if(req.method()==='POST')legalAccepted=true;value={data:{document:{version:'2026-11-17',sha256:'a'.repeat(64),url:'/legal/2026-11-17/villkor.html'},accepted:legalAccepted,acceptedAt:legalAccepted?'2026-11-16T12:00:00Z':null,history:legalAccepted?[{version:'2026-11-17',sha256:'a'.repeat(64),acceptedAt:'2026-11-16T12:00:00Z'}]:[]}};
     }else if(path.endsWith('/plan-preference')){if(req.method()==='POST'){const b=req.postDataJSON();planState={...planState,plan:b.plan,revision:planState.revision+1,updatedAt:new Date().toISOString()};}value={data:planState};
     }else if(path.endsWith('/team/invitations')){
       if(req.method()==='POST'){const b=req.postDataJSON();const i={id:'44444444-4444-4444-8444-444444444444',email:b.email,role:b.role,expires_at:new Date(Date.now()+86400000).toISOString()};invitations=[i];value={data:{...i,token:'a'.repeat(64)}};}else value={data:invitations};
@@ -697,7 +698,7 @@ test('key creation, filtering, atomic rotation presentation and bulk revocation'
 test('terms acceptance is explicit, versioned and separate from plan interest and payment',async({page})=>{
  let legalPosts=0,planPosts=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/account/legal'))legalPosts++;if(r.method()==='POST'&&r.url().includes('/plan-preference'))planPosts++;});
  await workspace(page);await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByRole('button',{name:'Acceptera kontovillkor'})).toBeDisabled();expect(legalPosts).toBe(0);
- await expect(page.getByRole('link',{name:'Läs kontovillkor, version 2026-11-16.2'})).toHaveAttribute('href','/legal/2026-11-16.2/villkor.html');await page.getByLabel('Jag accepterar kontovillkoren för mitt konto.').check();await page.getByRole('button',{name:'Acceptera kontovillkor'}).click();await expect(page.getByText(/^Accepterade /)).toBeVisible();expect(legalPosts).toBe(1);
+ await expect(page.getByRole('link',{name:'Läs kontovillkor, version 2026-11-17'})).toHaveAttribute('href','/legal/2026-11-17/villkor.html');await page.getByLabel('Jag accepterar kontovillkoren för mitt konto.').check();await page.getByRole('button',{name:'Acceptera kontovillkor'}).click();await expect(page.getByText(/^Accepterade /)).toBeVisible();expect(legalPosts).toBe(1);
  await page.getByText('Historik över accepterade villkor',{exact:true}).click();await expect(page.getByText('SHA-256:',{exact:false})).toBeVisible();await page.getByLabel('Upplägg',{exact:true}).selectOption('api');await page.getByRole('button',{name:'Spara planintresse'}).click();await expect(page.getByText('Senast sparat',{exact:false})).toBeVisible();expect(planPosts).toBe(1);await expect(page.getByText('Ingen betalning aktiverad',{exact:true})).toBeVisible();
  await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'.verification/account-controls.png',fullPage:true,animations:'disabled'});
 });
@@ -751,4 +752,16 @@ test('invalid CSV and duplicate email keep import disabled and oversized selecti
 });
 test('unknown import response retains the same request reference for manual retry',async({page})=>{
  await workspace(page);await page.getByRole('button',{name:'Företag & team',exact:true}).click();const ids:string[]=[];await page.route('**/v1/contacts/imports',route=>{if(route.request().method()!=='POST')return route.fallback();ids.push(route.request().postDataJSON().requestId);if(ids.length===1)return route.abort('failed');return route.fulfill({json:{data:{requestId:ids[0],created:1,skipped:0,archivedSkipped:0}}});});await page.getByLabel('CSV-fil med kontakter').setInputFiles({name:'retry.csv',mimeType:'text/csv',buffer:Buffer.from('Namn;E-post\nAnna;retry@example.invalid')});await page.getByRole('button',{name:'Bekräfta kontaktimport'}).click();await expect(page.getByRole('alert')).toContainText('Anslutningen avbröts');expect(ids).toHaveLength(1);await page.getByRole('button',{name:'Bekräfta kontaktimport'}).click();await expect(page.getByRole('status')).toContainText('Import klar: 1 nya');expect(ids).toHaveLength(2);expect(ids[0]).toBe(ids[1]);
+});
+test('verified signup completes its private server draft once and selects the returned workspace',async({page})=>{
+ await workspace(page);let complete=0;
+ await page.route('**/functions/v1/avtalslank-api/v1/account/registration',async route=>{
+  const headers={'access-control-allow-origin':'*','access-control-allow-headers':'authorization,content-type,apikey,x-client-info','content-type':'application/json'};
+  if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers});
+  const profile={kind:'company',fullName:'Testperson',organizationId:org,email:'test@example.invalid'};
+  if(route.request().method()==='POST'){complete++;expect(route.request().postDataJSON()).toEqual({organizationId:null});return route.fulfill({status:200,headers,body:JSON.stringify({data:profile})});}
+  return route.fulfill({status:200,headers,body:JSON.stringify({data:{profile:complete?profile:null,hasDraft:!complete,emailVerified:true}})});
+ });
+ await page.goto('/app');await expect(page.getByRole('button',{name:'Översikt',exact:true})).toBeVisible();expect(complete).toBe(1);
+ await page.reload();await expect(page.getByRole('button',{name:'Översikt',exact:true})).toBeVisible();expect(complete).toBe(1);
 });

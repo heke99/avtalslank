@@ -8,7 +8,7 @@ test('public hero, plans and legal navigation with no optional tracking or stora
     await expect(page.locator('#public-main')).toHaveCSS('margin-left','0px');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Avtal, dokument\s*och mottagare\./);
     await expect(page.getByText('En tjänst från Trafexa Nordic AB.', { exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Skapa ditt företagskonto' })).toHaveAttribute('href', '/signup');
+    await expect(page.getByRole('link', { name: 'Skapa konto' })).toHaveAttribute('href', '/signup');
     await page.getByRole('button', { name: 'Cookieinställningar', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Inte i bruk');
     await expect(page.getByRole('button', { name: 'Stäng inställningar' })).toBeFocused();
@@ -33,6 +33,9 @@ test('signup requires terms, carries only declared plan metadata, and creates no
         commerce.push(r.url()); });
     await page.route(auth + '/auth/v1/signup**', route => { payload = route.request().postDataJSON(); return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: '11111111-1111-4111-8111-111111111111', email: 'new@example.invalid', identities: [] }, session: null }) }); });
     await page.goto('/signup?plan=api');
+    await page.getByLabel('Bolagsnamn',{exact:true}).fill('Testbolaget');
+    await page.getByLabel('Organisationsnummer',{exact:true}).fill('556855-4884');
+    await page.getByLabel('Kontaktpersonens fullständiga namn',{exact:true}).fill('Test Kontakt');
     await page.getByLabel('E-postadress', { exact: true }).fill('new@example.invalid');
     await page.getByLabel('Lösenord', { exact: true }).fill('synthetic-test-password');
     await page.getByRole('button', { name: 'Skapa konto', exact: true }).click();
@@ -40,7 +43,7 @@ test('signup requires terms, carries only declared plan metadata, and creates no
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Skapa konto', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Kontrollera din inkorg');
-    expect(payload.data).toEqual({ account_terms_version: '2026-11-16.2', account_terms_accepted: true, plan_interest: 'api' });
+    expect(payload.data).toMatchObject({ account_terms_version: '2026-11-17', account_terms_accepted: true, plan_interest: 'api', registration:{kind:'company',companyName:'Testbolaget',registrationNumber:'5568554884',fullName:'Test Kontakt'} });
     expect(commerce).toEqual([]);
     await page.goto('/signup?plan=owner');
     await expect(page.getByLabel('Önskat upplägg', { exact: true })).toHaveValue('');
@@ -78,7 +81,7 @@ test('API examples switch language and copy the selected server example',async({
 });
 test('customer pages omit build-stage wording and preserve archived policy versions',async({page})=>{
  for(const path of ['/','/produkt','/abonnemang','/api','/sakerhet','/integritet','/villkor','/dataskydd']){await page.goto(path);await expect(page.locator('body')).not.toContainText(/skarpa utskick|skarp signering|inför lansering/i);}
- await page.goto('/villkor');await expect(page.locator('.public-version')).toContainText('Version 2026-11-16.2');await expect(page.getByRole('link',{name:'Tidigare version'})).toHaveAttribute('href','/legal/2026-11-16/villkor.html');
+ await page.goto('/villkor');await expect(page.locator('.public-version')).toContainText('Version 2026-11-17');await expect(page.getByRole('link',{name:'Tidigare version'})).toHaveAttribute('href','/legal/2026-11-16.2/villkor.html');
 });
 test('account startup presents recovery when session refresh cannot finish',async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('sb-ykddnagtuacflilbchwx-auth-token',JSON.stringify({access_token:'expired-synthetic-token',refresh_token:'synthetic-refresh',token_type:'bearer',expires_at:1,user:{id:'11111111-1111-4111-8111-111111111111',email:'test@example.invalid',aud:'authenticated',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-01-01T00:00:00Z'}})));
@@ -101,4 +104,13 @@ test('email entry routes work in a fresh browser with or without a trailing slas
  for(const path of ['/join','/join/']){
   await page.goto(path+'#token='+'e'.repeat(64));await expect(page.getByRole('heading',{name:'Inbjudan till Avtalslänk',exact:true})).toBeVisible();
  }
+});
+test('private signup collects identity, excludes company details and carries no billing entitlement',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ let payload:any=null;
+ await page.route(auth+'/auth/v1/signup**',route=>{payload=route.request().postDataJSON();return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({user:{id:'11111111-1111-4111-8111-111111111111',email:'private@example.invalid',identities:[]},session:null})});});
+ await page.goto('/signup');await page.getByLabel('Kontotyp',{exact:true}).selectOption('personal');
+ await expect(page.getByLabel('Bolagsnamn',{exact:true})).toHaveCount(0);await expect(page.getByLabel('Organisationsnummer',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Fullständigt namn',{exact:true}).fill('Private Test');await page.getByLabel('Personnummer (ÅÅÅÅMMDDNNNN)',{exact:true}).fill('199001010017');await page.getByLabel('E-postadress',{exact:true}).fill('private@example.invalid');await page.getByLabel('Lösenord',{exact:true}).fill('synthetic-test-password');await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Skapa konto',exact:true}).click();
+ await expect(page.getByRole('status')).toContainText('Kontrollera din inkorg');expect(payload.data.registration).toMatchObject({kind:'personal',fullName:'Private Test',personalNumber:'199001010017'});expect(payload.data.registration.companyName).toBeUndefined();expect(payload.data.plan_interest).toBe(null);expect(payload.data.role).toBeUndefined();
 });
