@@ -30,7 +30,7 @@ jobs:
       - run: npm run verify
       - run: npx playwright install --with-deps chromium
       - run: |
-          npm run dev -- --host 127.0.0.1 > /tmp/avtalslank-vite.log 2>&1 &
+          npm run dev -- --host 127.0.0.1 > /tmp/avtalslank-web.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:5173/ > /dev/null && break; sleep 1; done
           npm run test:browser
       - uses: actions/upload-artifact@v4

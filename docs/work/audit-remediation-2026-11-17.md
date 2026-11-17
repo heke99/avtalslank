@@ -19,3 +19,7 @@
 - Lokal Chromium hindras från att starta av miljöns begränsning av sockets. Kör browser- och containerkontroller i GitHub Actions före produktionsrullning.
 - Installera databasändringen före ny Edge-funktion och Railway-worker. Webbgränssnittet använder nya RPC-funktioner och publiceras efter serverändringarna.
 - Provkör ett syntetiskt avtal med bekräftad mejlleverans, slutförande, nedladdning och återförsök efter ett entydigt fel. Stäm av de första planerade lagringsrensningarna med Storage API. Ingen riktig automatisk debitering ingår i den här ändringen. Arkiveringshändelsen finns i kön för den framtida betalningsadaptern.
+
+## Byggkedja efter beroendegranskningen
+
+Vite-kedjan ersattes med esbuild 0.28.1 för att ta bort det berörda utvecklingsberoendet picomatch. Full npm-granskning körs fortsatt som separat CI-jobb. Produktionsbygget behåller dist, förrenderade publika sidor, versionsmärkta JS-/CSS-filer och befintliga Vercel-rutter. Endast tre uttryckligen listade publika webbvariabler bäddas in.
