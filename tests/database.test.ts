@@ -59,6 +59,7 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
   );
   await db.exec('reset role');
   await db.query("insert into al_private.api_entitlements(organization_id,model,paid_until,payment_reference) values($1,'subscription',now()+interval '1 day','fixture-a'),($2,'subscription',now()+interval '1 day','fixture-b')",[oa!,ob!]);
+  await db.query("insert into al_private.document_tariffs(organization_id,version,document_ore,included_signers,extra_signer_ore) values($1,1,0,1,0),($2,1,0,1,0)",[oa!,ob!]);
   await t.test("RLS denies reads/writes across organizations", async () => {
     await actor(a);
     assert.equal(
@@ -794,8 +795,8 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     action: string,
     payload: unknown = {},
     org: string = oa,
-  ) =>
-    (
+  ) => {if(action==='send'){const q=(await one('select public.al_document_quote($1,null,$2,$3) data',[a,org,id])).data;payload={...(payload as object),priceHash:q.hash};}
+    return (
       await one("select public.al_flow_command($1,null,$2,$3,$4,$5) data", [
         a,
         org,
@@ -803,7 +804,7 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
         action,
         payload,
       ])
-    ).data;
+    ).data;};
   let connected: string,
     first: string,
     second: string,
@@ -1451,7 +1452,10 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
           p_action: "heartbeat",
           p_payload: { ready: true, keyFingerprint: await sha256Hex(secret) },
         });
-        const started: any = await route("send", { generation: 2 });
+        await db.exec('reset role');await db.query("insert into al_private.document_tariffs(organization_id,version,document_ore,included_signers,extra_signer_ore) values($1,2,1000,1,250)",[oa]);
+        const quote=(await client.rpc('al_document_quote',{p_actor:a,p_key_hash:null,p_org:oa,p_envelope:envelope.id})).data;
+        await assert.rejects(route('send',{generation:2,priceHash:'stale'}),/PRICE_CHANGED/);
+        const started: any = await route("send", { generation: 2,priceHash:quote.hash });
         assert.equal(started.data.status, "sent");
         await db.exec("reset role");
         await db.query(
@@ -1806,7 +1810,7 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await actor(a);await db.query('select public.al_revoke_api_key($1,$2)',[oa,readId]);await service();await assert.rejects(db.query('select public.al_query_envelopes(null,$1,null)',[readHash]),/INVALID_API_KEY/);
     const {queryRoute}=await import('../supabase/functions/avtalslank-api/query.ts');
     const client:any={rpc:async(_name:string,args:any)=>({data:(await one('select public.al_query_envelopes($1,$2,$3,$4) data',[args.p_actor,args.p_key_hash,args.p_org,args.p_filters])).data,error:null})};
-    const response=await queryRoute(new Request('https://avtalslank.test/v1/envelopes?query=literal&limit=2'),'/v1/envelopes',client,{actor:a,keyHash:null,organizationId:oa});assert.ok(response);assert.equal(response.data.length,2);assert.ok(response.page.nextCursor);
+    const response=await queryRoute(new Request('https://avtalslank.test/v1/envelopes?query=literal&limit=2'),'/v1/envelopes',client,{actor:a,keyHash:null,organizationId:oa});assert.ok(response);assert.equal(response.data.length,2);assert.ok(response.page!.nextCursor);
   });
   await t.test('key lifecycle preserves permissions and expiry, rejects expired keys, and rolls back failed rotation',async()=>{
     await service();const manage=async(action:string,payload:any={},who=a,org=oa)=>(await one('select public.al_manage_keys($1,$2,$3,$4) data',[who,org,action,payload])).data;
@@ -1980,6 +1984,26 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await admin();await call('note',{body:'Synthetic support note',reason:'Record support context'},oa);company=await call('company',{},oa);assert.equal(company.history.length,2);assert.equal(company.notes[0].body,'Synthetic support note');
     const billing=(await one('select public.al_platform_billing_status() data')).data;assert.equal(Number(billing.sync.find((j:any)=>j.status==='blocked').count),4);
     await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({role:'anon'})]);await db.exec('set role anon');const pub=await one('select public.al_public_prices() data');assert.ok(!JSON.stringify(pub).includes('private-offer-a'));await assert.rejects(db.query("select public.al_platform_commercial('catalog')"),/permission denied/);
+  });
+
+  await t.test('signed search isolates tenants and final document charges are unique frozen records',async()=>{
+    await db.exec('reset role');const row=await one("select e.id,c.price_quote from public.al_envelopes e join al_private.signing_cases c on c.envelope_id=e.id where e.organization_id=$1 and e.status='completed' and c.price_quote is not null limit 1",[oa]);assert.ok(row);
+    await db.exec('reset role');const count=await one('select count(*)::int n from al_private.document_charges where envelope_id=$1',[row.id]);assert.equal(count.n,row.price_quote.documents);
+    const r=await one('select name,email from public.al_recipients where envelope_id=$1 limit 1',[row.id]);
+    await actor(a,'service_role');const search=(await one('select public.al_search_signed($1,null,$2,$3,null,100) data',[a,oa,r.email])).data;assert.ok(search.items.some((x:any)=>x.id===row.id));assert.ok(!JSON.stringify(search).includes('personalNumber'));
+    await assert.rejects(db.query('select public.al_search_signed($1,null,$2,$3,null,100)',[b,oa,r.email]),/ACCESS_DENIED/);
+    await db.exec('reset role');await db.query('update al_private.signing_cases set finalized_at=finalized_at where envelope_id=$1',[row.id]);assert.equal((await one('select count(*)::int n from al_private.document_charges where envelope_id=$1',[row.id])).n,count.n);
+    await assert.rejects(db.query("update al_private.signing_cases set price_quote='{}' where envelope_id=$1",[row.id]),/IMMUTABLE_PRICE_QUOTE/);
+    await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');const tariff=(await one('select public.al_admin_document_tariff($1) data',[oa])).data;assert.equal(tariff.tariff.document_ore,1000);
+    await one('select public.al_admin_document_tariff($1,$2) data',[oa,{version:tariff.tariff.version,documentOre:10000,includedSigners:1,extraSignerOre:2500,reason:'Verify future tariff isolation'}]);
+    await db.exec('reset role');const fixture=crypto.randomUUID(),recipient=crypto.randomUUID();
+    await db.query("insert into public.al_envelopes(id,organization_id,title,status,created_by) values($1,$2,'Signed party search fixture','completed',$3)",[fixture,oa,a]);
+    await db.query("insert into public.al_recipients(id,organization_id,envelope_id,name,email,method,position,status,company_name,registration_number) values($1,$2,$3,'Search Signer','signed-party@example.invalid','email_approval',1,'signed','Kundbolag Sök AB','5568554884')",[recipient,oa,fixture]);
+    await db.query("insert into al_private.signing_cases(envelope_id,organization_id,snapshot,snapshot_hash,expires_at,finalized_at) values($1,$2,'{}',$3,now()+interval '1 day',now())",[fixture,oa,'a'.repeat(64)]);
+    await actor(a,'service_role');for(const term of ['Kundbolag Sök','556855-4884','signed-party@example.invalid','Search Signer']){const found=(await one('select public.al_search_signed($1,null,$2,$3,null,100) data',[a,oa,term])).data;assert.ok(found.items.some((x:any)=>x.id===fixture));}
+    const firstPage=(await one("select public.al_search_signed($1,null,$2,'',null,1) data",[a,oa])).data;assert.equal(firstPage.items.length,1);assert.ok(firstPage.nextCursor);const nextPage=(await one("select public.al_search_signed($1,null,$2,'',$3,1) data",[a,oa,firstPage.nextCursor])).data;assert.notEqual(nextPage.items[0].id,firstPage.items[0].id);
+    await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');assert.ok((await one("select public.al_admin_search_signed('Kundbolag Sök') data")).data.items.some((x:any)=>x.id===fixture));
+    await db.exec('reset role');const saved=await one('select price_quote from al_private.signing_cases where envelope_id=$1',[row.id]);assert.deepEqual(saved.price_quote,row.price_quote);
   });
   await db.close();
 });

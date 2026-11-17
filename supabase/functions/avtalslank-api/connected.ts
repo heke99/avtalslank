@@ -124,7 +124,7 @@ export async function connectedRoute(
   body: Record<string, unknown>,
 ) {
   const match = path.match(
-    /^\/v1\/envelopes\/([a-f0-9-]+)\/(fields|prepare|send|cancel|documents|deliveries|final)$/i,
+    /^\/v1\/envelopes\/([a-f0-9-]+)\/(fields|prepare|send|cancel|documents|deliveries|final|quote|party)$/i,
   );
   if (path === "/v1/webhooks" && req.method === "POST") {
     if (!identity.actor || identity.keyHash) throw Error("ADMIN_REQUIRED");
@@ -155,6 +155,8 @@ export async function connectedRoute(
       p_action: action,
       p_payload: payload,
     });
+  if(operation==='quote' && req.method==='GET')return {data:await call(db,'al_document_quote',context)};
+  if(operation==='party' && req.method==='POST')return {data:await flow('party',body)};
   if (operation === "documents" && req.method === "POST") {
     if (req.headers.get("content-type")?.split(";")[0] !== "application/pdf")
       throw Error("INVALID_PDF");
@@ -231,6 +233,7 @@ export async function connectedRoute(
     return {
       data: await flow("send", {
         generation: body.generation,
+        priceHash: body.priceHash,
         snapshot,
         links,
         keyFingerprint: await sha256Hex(secret),

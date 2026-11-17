@@ -3,7 +3,7 @@
   "info": {
     "title": "Avtalslänk API",
     "version": "0.9.0",
-    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled. User-only account controls register versioned terms acceptance, commercial plan interest (no billing), bounded API-key lifecycle and disabled-webhook secret rotation. API-key expiry is checked before cached responses. New credential secrets are returned only once; mutations are never automatically retried. Signer approval now requires self-declared full name and a twelve-digit Swedish personal number (calendar and checksum validation only). Server records approval time, signing hash and an explicitly unverified forwarded IP observation when available. New final archives include checksums.sha256 and are verified before publishing. Completion messages are transactional, idempotent and do not attach personal documents. Company and personal registration are user-only. Signup descriptors are captured privately before auth metadata is stored. Only verified email can complete a profile; existing company association requires active membership. Personal numbers are masked in profile responses and never grant identity verification. All customer API keys now require a non-suspended, unexpired, paid subscription entitlement. PAYMENT_REQUIRED returns HTTP 402 before dispatch and is enforced in database entry points, including cached retries. Subscription rights are manually recorded against a confirmed payment reference by MFA-authenticated platform administrators. No payment provider is connected; per-document/hybrid charging remains disabled pending credit reservations. Supabase user sessions for the web app are separate from customer integration API keys."
+    "description": "Standalone organization workspace and connected email approval workflow. Sending requires enabled capability, live worker heartbeat and a dedicated shared signing key. BankID/Freja/drawn signing and payment checkout are disabled. Legacy API-key mutations use Idempotency-Key; connected operations use explicit document IDs, generation checks and unique signing-case/recipient decisions. User tokens require organizationId. Verified users with enrolled MFA require AAL2 on direct database access and Edge user routes. Team endpoints accept user tokens only. Invitations expire in seven days; tokens are returned once for manual sharing. Reminders use existing links and require accepted previous invitation, 30 minute cooldown, maximum three. Billing remains disabled. User-only account controls register versioned terms acceptance, commercial plan interest (no billing), bounded API-key lifecycle and disabled-webhook secret rotation. API-key expiry is checked before cached responses. New credential secrets are returned only once; mutations are never automatically retried. Signer approval now requires self-declared full name and a twelve-digit Swedish personal number (calendar and checksum validation only). Server records approval time, signing hash and an explicitly unverified forwarded IP observation when available. New final archives include checksums.sha256 and are verified before publishing. Completion messages are transactional, idempotent and do not attach personal documents. Company and personal registration are user-only. Signup descriptors are captured privately before auth metadata is stored. Only verified email can complete a profile; existing company association requires active membership. Personal numbers are masked in profile responses and never grant identity verification. All customer API keys now require a non-suspended, unexpired, paid subscription entitlement. PAYMENT_REQUIRED returns HTTP 402 before dispatch and is enforced in database entry points, including cached retries. Subscription rights are manually recorded against a confirmed payment reference by MFA-authenticated platform administrators. No payment provider is connected; per-document/hybrid charging remains disabled pending credit reservations. Supabase user sessions for the web app are separate from customer integration API keys. Sending now requires priceHash from GET quote and explicit price acceptance. New finalizations record one immutable internal cost per PDF using the frozen signer-count price; external payment jobs remain blocked until the provider is configured. Legacy completed agreements are never backcharged."
   },
   "servers": [
     {
@@ -2275,6 +2275,59 @@
           },
           "403": {
             "description": "No active membership for requested existing company"
+          }
+        }
+      }
+    },
+    "/v1/signed-search": {
+      "get": {
+        "summary": "Search completed agreements by signer name, company, organization number or email in authorized workspace",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data.items and UUID nextCursor; no personal numbers or IPs. API-key payment and scope checks apply."
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/quote": {
+      "get": {
+        "summary": "Get server-calculated document price and acceptance hash",
+        "responses": {
+          "200": {
+            "description": "Frozen/current tariff, PDF and signer counts, unitOre,totalOre,hash; SEK excluding VAT."
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{id}/party": {
+      "post": {
+        "summary": "Save recipient companyName and registrationNumber in draft; increments generation",
+        "responses": {
+          "200": {
+            "description": "Draft party saved. Sent parties cannot be changed."
           }
         }
       }

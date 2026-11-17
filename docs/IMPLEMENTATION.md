@@ -132,3 +132,7 @@ Se [plattformsadministration](work/platform-admin.md) för roller, MFA, revision
 ## Kommersiell administration
 
 Se [priser, bolagsupplägg och leverantörsbyte](work/commercial-admin.md). Betalningsanslutningen är fortfarande blockerad i väntan på separat Avtalslänk-konto och aktiv adapter/webhook-integration.
+
+## Signerad sökning och kostnad per PDF
+
+Se [signerad sökning och dokumentpris](work/signed-search-document-pricing.md) för serverquote, uttrycklig prisacceptans, låst pris, engångsregistrering och externa betalningsbegränsningar.

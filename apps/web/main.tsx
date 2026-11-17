@@ -1,3 +1,4 @@
+import {SignedAgreementSearch,PriceReview,RecipientCompany} from "./SignedAgreements";
 import {MyCommercial} from "./CommercialAdmin";
 import AuthConfirmation from "./AuthConfirmation";
 import PlatformAdmin,{PlatformAdminLink} from "./PlatformAdmin";
@@ -502,6 +503,7 @@ function App() {
                       </label></>
                     )}
                   </div>
+                  {view==='agreements'&&<SignedAgreementSearch key={orgId} orgId={orgId} onOpen={id=>action(async()=>{const r=await supabase.from('al_envelopes').select('*').eq('organization_id',orgId).eq('id',id).single();if(r.error)throw r.error;setSelected(r.data);})}/>}
                   {view==='agreements'&&<div className="agreement-controls"><label>Sortera avtal<select value={agreementSort} onChange={e=>setAgreementSort(e.target.value as typeof agreementSort)}><option value="latest">Senast uppdaterade</option><option value="oldest">Äldst uppdaterade</option><option value="title">Avtalsnamn A–Ö</option></select></label><label>Uppdaterad från<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Uppdaterad till<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><button className="secondary" onClick={()=>{setQuery('');setStatusFilter('');setDateFrom('');setDateTo('');setAgreementSort('latest');}}>Rensa filter</button><button className="secondary" disabled={!displayedAgreements.length} onClick={exportAgreements}>Exportera visade avtal (CSV)</button><p>{displayedAgreements.length} visade av {envelopes.filter(e=>e.organization_id===orgId).length} inlästa avtal. Högst 100 rader visas och exporteras. Datum avser svensk tid.</p>{dateFrom&&dateTo&&dateFrom>dateTo&&<p role="alert">Fråndatum behöver vara före eller samma dag som tilldatum.</p>}</div>}
                   {envelopes.length === 0 ? (
                     <Empty
@@ -1094,6 +1096,8 @@ function EnvelopeDetail({
   function goStep(next:number){if(next===step)return;if(fieldsDirty&&!confirm("Dokumentfälten är inte sparade. Lämna steget och kasta ändringarna?"))return;setFieldsDirty(false);setStep(next);}
   const draftForm=useRef<HTMLFormElement>(null);
   const [uploadStage,setUploadStage]=useState('');
+  const [priceHash,setPriceHash]=useState('');
+  useEffect(()=>setPriceHash(''),[e.generation]);
   const dirty=e.status==='draft'&&(title!==e.title||message!==e.message||sequential!==e.sequential||expiresDays!==e.expires_days||fieldsDirty);
   useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
   useEffect(()=>{const leave=(event:BeforeUnloadEvent)=>{if(dirty){event.preventDefault();event.returnValue='';}};const save=(event:KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'&&draftForm.current){event.preventDefault();if(!busy)draftForm.current.requestSubmit();}};window.addEventListener('beforeunload',leave);window.addEventListener('keydown',save);return()=>{window.removeEventListener('beforeunload',leave);window.removeEventListener('keydown',save);};},[dirty,busy]);
@@ -1501,6 +1505,7 @@ function EnvelopeDetail({
                 </p>
               </div>
             )}
+            {!locked&&<><PriceReview orgId={orgId} envelopeId={e.id} generation={e.generation} onAccept={setPriceHash}/>{recipients.map(r=><RecipientCompany key={r.id} orgId={orgId} envelopeId={e.id} recipient={r} onSaved={()=>{setPriceHash('');onSaved({...e,generation:e.generation+1});action(load);}}/>)}</>}
             <div className="actions">
               <button
                 className="secondary danger"
@@ -1527,13 +1532,13 @@ function EnvelopeDetail({
               </button>
               <button
                 className="primary"
-                disabled={busy || locked || issues.length > 0}
+                disabled={busy || locked || issues.length > 0 || !priceHash}
                 onClick={() =>
                   action(async () => {
                     onSaved({
                       ...e,
                       ...(await envelopeApi(orgId, e.id, "send", {
-                        generation: e.generation,
+                        generation: e.generation,priceHash,
                       })),
                     });
                   })

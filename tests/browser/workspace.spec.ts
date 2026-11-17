@@ -563,6 +563,7 @@ test("sender can recall a sent envelope through the connected API", async ({
         ]),
       }),
   );
+  await page.route('**/functions/v1/avtalslank-api/v1/envelopes/**/quote*',r=>r.fulfill({json:{data:{hash:'test-price-hash',documents:1,signers:1,unitOre:1000,totalOre:1000}}}));
   let recalled = false;
   await page.route(
     "**/functions/v1/avtalslank-api/v1/envelopes/**/send*",
@@ -607,6 +608,9 @@ test("sender can recall a sent envelope through the connected API", async ({
     .getByRole("button", { name: "Lägg till mottagare", exact: true })
     .click();
   await page.getByRole("button", { name: /Granska & skicka/ }).click();
+  await expect(page.getByRole('button',{name:'Skicka för signering',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Hämta aktuellt signeringspris'}).click();
+  await page.getByLabel('Jag godkänner priset för detta utskick').check();
   await expect(
     page.getByRole("button", { name: "Skicka för signering", exact: true }),
   ).toBeEnabled();
@@ -779,4 +783,10 @@ test('superadmin saves integer-ore price version and publishes separately',async
  await page.route('**/rest/v1/rpc/al_platform_commercial',r=>{const p=r.request().postDataJSON();if(p.p_action==='catalog')return r.fulfill({json:items});if(p.p_action==='overview')return r.fulfill({json:{organizations:2,users:3,agreements:4,completed:1,paidApi:0,failedJobs:0}});changes.push(p);if(p.p_action==='save_price')items=[{code:p.p_payload.code,revision:1,latest:1,published:null,active:true,id:'price-test',terms:p.p_payload.terms}];if(p.p_action==='publish_price')items=[{...items[0],published:1,revision:2}];return r.fulfill({json:{ok:true}});});
  await page.goto('/admin');await page.getByText('Priser och paket',{exact:true}).click();await page.getByLabel('Paketkod',{exact:true}).fill('api');await page.getByLabel('Paketnamn',{exact:true}).fill('API Test');await page.getByLabel('Fast pris, kr',{exact:true}).fill('199,50');await page.getByLabel('Anledning till prisändring',{exact:true}).fill('Nytt paket för kontroll');await page.getByRole('button',{name:'Spara prisversion',exact:true}).click();await expect(page.getByRole('status')).toContainText('Ny prisversion sparad');expect(changes[0].p_payload.terms.baseOre).toBe(19950);expect(changes.some(c=>c.p_action==='publish_price')).toBe(false);
  page.once('dialog',d=>d.accept('Publicera kontrollerat paket'));await page.getByRole('button',{name:'Publicera API Test',exact:true}).click();await expect(page.getByRole('status')).toContainText('Prisversionen är publicerad');expect(changes.at(-1).p_payload.revision).toBe(1);
+});
+
+test('signed agreement search uses server cursor and signer metadata',async({page})=>{
+ await workspace(page);let queries:string[]=[];
+ await page.route('**/functions/v1/avtalslank-api/v1/signed-search**',r=>{const u=new URL(r.request().url());queries.push(u.searchParams.get('query')??'');const next=!!u.searchParams.get('cursor');return r.fulfill({json:{data:{items:[{id:next?'33333333-3333-4333-8333-333333333333':'44444444-4444-4444-8444-444444444444',title:next?'Andra signerade avtalet':'Första signerade avtalet',company:'Kundbolaget',finalized_at:'2026-11-17T08:00:00Z',signers:[{name:'Signerad Person',email:'signed@example.invalid',company:'Kundbolaget',registrationNumber:'5568554884'}]}],nextCursor:next?null:'44444444-4444-4444-8444-444444444444'}}});});
+ await page.goto('/');await page.getByRole('button',{name:'Avtal',exact:true}).click();await page.getByLabel('Namn, företag, organisationsnummer eller e-post').fill('signed@example.invalid');await page.getByRole('button',{name:'Sök signerade avtal',exact:true}).click();await expect(page.getByText('Första signerade avtalet',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Visa fler signerade avtal'}).click();await expect(page.getByText('Andra signerade avtalet',{exact:true})).toBeVisible();expect(queries).toEqual(['signed@example.invalid','signed@example.invalid']);
 });
