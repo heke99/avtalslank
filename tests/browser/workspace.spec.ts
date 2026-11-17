@@ -801,3 +801,7 @@ test('account loading times out visibly and can recover without registering a se
  await page.route('**/functions/v1/avtalslank-api/v1/account/registration**',async r=>{requested=true;if(hang)return new Promise<void>(()=>{});return r.fulfill({json:{data:{profile:{kind:'company',organizationId:org},hasDraft:false,emailVerified:true}}});});
  await page.goto('/');await expect.poll(()=>requested).toBe(true);await page.clock.fastForward(21000);await expect(page.getByRole('heading',{name:'Kontot kunde inte öppnas'})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toHaveCount(0);hang=false;await page.getByRole('button',{name:'Försök igen',exact:true}).click();await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeVisible();
 });
+
+test('registration data conflicts remain editable instead of being treated as network failures',async({page})=>{
+ await workspace(page);await page.route('**/functions/v1/avtalslank-api/v1/account/registration**',r=>r.request().method()==='POST'?r.fulfill({status:400,json:{error:{code:'COMPANY_ALREADY_REGISTERED'}}}):r.fulfill({json:{data:{profile:null,hasDraft:true,emailVerified:true}}}));await page.goto('/');await expect(page.getByRole('heading',{name:'Komplettera ditt konto'})).toBeVisible();await expect(page.getByLabel('Bolagsnamn',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toBeVisible();
+});
