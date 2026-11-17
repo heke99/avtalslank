@@ -1,0 +1,83 @@
+[
+  {
+    "id": "health",
+    "result": "PASS",
+    "status": 200,
+    "code": null,
+    "ms": 10451,
+    "requestId": "033ff974-e89a-49bb-a941-040897de6790",
+    "cacheControl": "no-store"
+  },
+  {
+    "id": "unauthenticated",
+    "result": "PASS",
+    "status": 401,
+    "code": "AUTH_REQUIRED",
+    "ms": 6778,
+    "requestId": "24b81bd9-6da9-4a45-b4b4-110c68eed819",
+    "cacheControl": "no-store"
+  },
+  {
+    "id": "forged_session",
+    "result": "PASS",
+    "status": 401,
+    "code": "AUTH_REQUIRED",
+    "ms": 6997,
+    "requestId": "2e505946-7efe-45ba-ab27-796b20eb214f",
+    "cacheControl": "no-store"
+  },
+  {
+    "id": "forbidden_origin",
+    "result": "PASS",
+    "status": 403,
+    "code": "ORIGIN_DENIED",
+    "ms": 5993,
+    "requestId": "b12b0a89-c3bc-4af0-812b-e71792d84816",
+    "cacheControl": "no-store"
+  },
+  {
+    "id": "invalid_link",
+    "result": "PASS",
+    "status": 401,
+    "code": "INVALID_SIGNING_LINK",
+    "ms": 7592,
+    "requestId": "9aa88faf-cae3-4752-aa87-69374ea46f87",
+    "cacheControl": "no-store"
+  },
+  {
+    "id": "malformed_link",
+    "result": "PASS",
+    "status": 401,
+    "code": "INVALID_SIGNING_LINK",
+    "ms": 6135,
+    "requestId": "baffeb03-5bb5-466e-8c7b-df7646d83e6e",
+    "cacheControl": "no-store"
+  },
+  {
+    "id": "malformed_json",
+    "result": "PASS",
+    "status": 400,
+    "code": "INVALID_JSON",
+    "ms": 6056,
+    "requestId": "101575db-94a9-4f13-a522-1d3bbd1f74ef",
+    "cacheControl": "no-store"
+  },
+  {
+    "id": "bounded_body",
+    "result": "PASS",
+    "status": 400,
+    "code": "BODY_TOO_LARGE",
+    "ms": 7171,
+    "requestId": "07289d98-8a12-4af5-b60d-fa643b940464",
+    "cacheControl": "no-store"
+  },
+  {
+    "id": "missing_decision",
+    "result": "PASS",
+    "status": 400,
+    "code": "INVALID_DECISION",
+    "ms": 6474,
+    "requestId": "5f38282c-4053-4f2a-b4cd-2c3870186038",
+    "cacheControl": "no-store"
+  }
+]

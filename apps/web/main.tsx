@@ -510,7 +510,7 @@ function App() {
                       </label></>
                     )}
                   </div>
-                  {view==='agreements'&&<SignedAgreementSearch key={orgId} orgId={orgId} onOpen={id=>action(async()=>{const r=await supabase.from('al_envelopes').select('*').eq('organization_id',orgId).eq('id',id).single();if(r.error)throw r.error;setSelected(r.data);})}/>}
+                  {view==='agreements'&&<SignedAgreementSearch key={orgId} orgId={orgId} onOpen={id=>action(async()=>{const r=await bounded(supabase.from('al_envelopes').select('*').eq('organization_id',orgId).eq('id',id).single());if(r.error)throw r.error;setSelected(r.data);})}/>}
                   {view==='agreements'&&<div className="agreement-controls"><label>Sortera avtal<select value={agreementSort} onChange={e=>setAgreementSort(e.target.value as typeof agreementSort)}><option value="latest">Senast uppdaterade</option><option value="oldest">Äldst uppdaterade</option><option value="title">Avtalsnamn A–Ö</option></select></label><label>Uppdaterad från<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Uppdaterad till<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><button className="secondary" onClick={()=>{setQuery('');setStatusFilter('');setDateFrom('');setDateTo('');setAgreementSort('latest');}}>Rensa filter</button><button className="secondary" disabled={!displayedAgreements.length} onClick={exportAgreements}>Exportera visade avtal (CSV)</button><p>{displayedAgreements.length} visade av {envelopes.filter(e=>e.organization_id===orgId).length} inlästa avtal. Högst 100 rader visas och exporteras. Datum avser svensk tid.</p>{dateFrom&&dateTo&&dateFrom>dateTo&&<p role="alert">Fråndatum behöver vara före eller samma dag som tilldatum.</p>}</div>}
                   {envelopes.length === 0 ? (
                     <Empty
@@ -898,12 +898,13 @@ function Auth({
   notice: string;
   onError: (e: unknown) => void;
 }) {
-  const [mode, setMode] = useState<"login" | "register" | "reset">(location.pathname==="/signup"?"register":"login"),
+  const [mode, setMode] = useState<"login" | "register" | "reset">(location.pathname.replace(/\/$/,"")==="/signup"?"register":new URLSearchParams(location.search).get("mode")==="reset"?"reset":"login"),
     [busy, setBusy] = useState(false),
     [success, setSuccess] = useState(""),
     [confirmationEmail,setConfirmationEmail]=useState(""),
     [accountKind,setAccountKind]=useState<AccountKind>('company'),
     [plan,setPlan]=useState(selectedPlan(new URLSearchParams(location.search).get("plan"))??"");
+  useEffect(()=>{if(!["/login","/signup"].includes(location.pathname.replace(/\/$/,"")))return;const url=new URL(location.href);url.pathname=mode==="register"?"/signup":"/login";if(mode==="reset")url.searchParams.set("mode","reset");else url.searchParams.delete("mode");history.replaceState(null,"",url);},[mode]);
   const confirmationHeading=useRef<HTMLHeadingElement>(null);
   useEffect(()=>{if(confirmationEmail){window.scrollTo({top:0,behavior:'instant'});confirmationHeading.current?.focus();}},[confirmationEmail]);
   if(confirmationEmail)return <main className="auth-layout"><section className="auth-main"><Brand/><div className="auth-form"><h1 ref={confirmationHeading} tabIndex={-1}>Bekräftelsemejl skickat</h1><p role="status">Vi har skickat ett bekräftelsemejl till <strong>{confirmationEmail}</strong>. Öppna mejlet och klicka på länken för att bekräfta ditt konto.</p><p>Kontrollera även skräpposten om mejlet inte finns i inkorgen. Det kan ta några minuter innan det kommer fram.</p><a className="primary full" href="/login">Till inloggningen</a><button className="text-button" onClick={()=>{setConfirmationEmail('');setSuccess('');}}>Ändra e-postadress</button><p>Behöver du hjälp? <a href="/hjalp">Kontakta oss</a>.</p></div></section></main>;
@@ -1109,7 +1110,7 @@ function EnvelopeDetail({
   useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
   useEffect(()=>{const leave=(event:BeforeUnloadEvent)=>{if(dirty){event.preventDefault();event.returnValue='';}};const save=(event:KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'&&draftForm.current){event.preventDefault();if(!busy)draftForm.current.requestSubmit();}};window.addEventListener('beforeunload',leave);window.addEventListener('keydown',save);return()=>{window.removeEventListener('beforeunload',leave);window.removeEventListener('keydown',save);};},[dirty,busy]);
   async function load() {
-    const [a, b, c] = await Promise.all([
+    const [a, b, c] = await bounded(Promise.all([
       supabase.from("al_documents").select("*").eq("envelope_id", e.id),
       supabase
         .from("al_recipients")
@@ -1122,7 +1123,7 @@ function EnvelopeDetail({
         .eq("envelope_id", e.id)
         .order("created_at", { ascending: false })
         .limit(20),
-    ]);
+    ]));
     if (a.error || b.error || c.error) throw a.error || b.error || c.error;
     setDocuments(a.data ?? []);
     setRecipients(b.data ?? []);
