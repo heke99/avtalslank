@@ -429,6 +429,7 @@ export function DeliveryHistory({
         <button
           className="secondary"
           onClick={async () => {
+            setError("");try{
             const session=await currentSession();
             const r = await fetch(
               `${apiUrl}/v1/envelopes/${envelopeId}/final?organizationId=${orgId}`,
@@ -448,6 +449,7 @@ export function DeliveryHistory({
             a.download = "avtalslank-bevispaket.zip";
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }catch(e){setError(displayError(e));}
           }}
         >
           Hämta dokument och bevispaket
