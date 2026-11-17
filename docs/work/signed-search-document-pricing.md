@@ -11,3 +11,7 @@ Efter verifierad PDF-finalisering registrerar DB-trigger en immutable kostnadspo
 Automatisk extern debitering är fortsatt blocked_provider: det separata Stripe-kontot/adapter/webhooks är inte anslutna. Registrerad dokumentkostnad är inte en genomförd betalning. Ingen ny betald API-rätt ges av tariff eller kostnadspost.
 
 Verifiering: npm run verify: 114 tester, typkontroller, proveniens och build godkända. Befintligt integrerat HTTP→PostgreSQL→worker→riktig PDF/ZIP-test kräver nu prisquote och testar stale hash innan giltigt utskick. SQL testar slutkostnader, replay, immutable quote, annan tenant, företagsnamn/orgnr/e-post/namn, cursor och admin. Hosted rollback: 2 PDF och 3 signerare beräknades till 1500 öre/PDF och 3000 öre totalt; data återställda. Browserfall uppdaterat för prisgodkännande och nytt sök-/pagineringstest tillagt. Drift/CI-resultat kontrolleras efter publicering.
+
+## Produktionsutfall
+
+Runtime publicerat i c7e521ac9397fd85f53a9338054a58379c675d89. Vercel READY, Edge v16 aktiv. GitHub CI 44063974356: 114 kod/databastester och 46 browserfall godkända; workercontainer godkänd. Migrationerna 20261117101657 och 20261117101856 tillämpade. Efter färsk ready-heartbeat aktiverades email_approval enligt användarens begäran, med plattformsaudit. BankID/Freja/ritad signatur ändrades inte. Dokumentpris krävs fortfarande per arbetsyta och inga verkliga priser har hittats på; superadmin anger tariffen före första nya utskicket. Externa betalningsjobb kvar i blocked_provider.
