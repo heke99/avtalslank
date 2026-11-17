@@ -1,3 +1,4 @@
+import AuthConfirmation from "./AuthConfirmation";
 import PlatformAdmin,{PlatformAdminLink} from "./PlatformAdmin";
 import {RegistrationFields,RegistrationGate,AccountRegistrationSummary} from "./Registration";
 import {registrationFromForm,type AccountKind} from "../../packages/accounts/src/index";
@@ -235,6 +236,7 @@ function App() {
     );
   const publicPath=location.pathname.replace(/\/$/,"")||"/";
   if(publicPaths.includes(publicPath as typeof publicPaths[number]) && (publicPath!=="/"||!session)) return <PublicSite path={publicPath} requestedVersion={new URLSearchParams(location.search).get("version")}/>;
+  if (publicPath === "/auth/confirm")return <AuthConfirmation/>;
   if (publicPath === "/s" || publicPath.startsWith("/s/")) return <Signer />;
   if (publicPath === "/reset-password")
     return <PasswordReset session={session} onError={notify} notice={notice} />;
@@ -889,8 +891,12 @@ function Auth({
   const [mode, setMode] = useState<"login" | "register" | "reset">(location.pathname==="/signup"?"register":"login"),
     [busy, setBusy] = useState(false),
     [success, setSuccess] = useState(""),
+    [confirmationEmail,setConfirmationEmail]=useState(""),
     [accountKind,setAccountKind]=useState<AccountKind>('company'),
     [plan,setPlan]=useState(selectedPlan(new URLSearchParams(location.search).get("plan"))??"");
+  const confirmationHeading=useRef<HTMLHeadingElement>(null);
+  useEffect(()=>{if(confirmationEmail){window.scrollTo({top:0,behavior:'instant'});confirmationHeading.current?.focus();}},[confirmationEmail]);
+  if(confirmationEmail)return <main className="auth-layout"><section className="auth-main"><Brand/><div className="auth-form"><h1 ref={confirmationHeading} tabIndex={-1}>Bekräftelsemejl skickat</h1><p role="status">Vi har skickat ett bekräftelsemejl till <strong>{confirmationEmail}</strong>. Öppna mejlet och klicka på länken för att bekräfta ditt konto.</p><p>Kontrollera även skräpposten om mejlet inte finns i inkorgen. Det kan ta några minuter innan det kommer fram.</p><a className="primary full" href="/login">Till inloggningen</a><button className="text-button" onClick={()=>{setConfirmationEmail('');setSuccess('');}}>Ändra e-postadress</button><p>Behöver du hjälp? <a href="/hjalp">Kontakta oss</a>.</p></div></section></main>;
   return (
     <div className="auth-layout">
       <div className="auth-main">
@@ -951,6 +957,7 @@ function Auth({
                           redirectTo: location.origin + "/reset-password",
                         });
                 if (result.error) throw result.error;
+                if(mode==="register" && !("session" in result.data && result.data.session))setConfirmationEmail(email);
                 if (mode !== "login")
                   setSuccess(
                     mode === "register"

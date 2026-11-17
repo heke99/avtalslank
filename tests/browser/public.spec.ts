@@ -42,7 +42,10 @@ test('signup requires terms, carries only declared plan metadata, and creates no
     expect(payload).toBeNull();
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Skapa konto', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('Kontrollera din inkorg');
+    await expect(page.getByRole('status')).toContainText('Vi har skickat ett bekräftelsemejl');
+    await expect(page.getByRole('heading',{name:'Bekräftelsemejl skickat'})).toBeFocused();
+    await expect(page.locator('form')).toHaveCount(0);
+    await expect(page.getByText(/Kontrollera även skräpposten/)).toBeVisible();
     expect(payload.data).toMatchObject({ account_terms_version: '2026-11-17', account_terms_accepted: true, plan_interest: 'api', registration:{kind:'company',companyName:'Testbolaget',registrationNumber:'5568554884',fullName:'Test Kontakt'} });
     expect(commerce).toEqual([]);
     await page.goto('/signup?plan=owner');
@@ -112,5 +115,12 @@ test('private signup collects identity, excludes company details and carries no 
  await page.goto('/signup');await page.getByLabel('Kontotyp',{exact:true}).selectOption('personal');
  await expect(page.getByLabel('Bolagsnamn',{exact:true})).toHaveCount(0);await expect(page.getByLabel('Organisationsnummer',{exact:true})).toHaveCount(0);
  await page.getByLabel('Fullständigt namn',{exact:true}).fill('Private Test');await page.getByLabel('Personnummer (ÅÅÅÅMMDDNNNN)',{exact:true}).fill('199001010017');await page.getByLabel('E-postadress',{exact:true}).fill('private@example.invalid');await page.getByLabel('Lösenord',{exact:true}).fill('synthetic-test-password');await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Skapa konto',exact:true}).click();
- await expect(page.getByRole('status')).toContainText('Kontrollera din inkorg');expect(payload.data.registration).toMatchObject({kind:'personal',fullName:'Private Test',personalNumber:'199001010017'});expect(payload.data.registration.companyName).toBeUndefined();expect(payload.data.plan_interest).toBe(null);expect(payload.data.role).toBeUndefined();
+ await expect(page.getByRole('status')).toContainText('Vi har skickat ett bekräftelsemejl');expect(payload.data.registration).toMatchObject({kind:'personal',fullName:'Private Test',personalNumber:'199001010017'});expect(payload.data.registration.companyName).toBeUndefined();expect(payload.data.plan_interest).toBe(null);expect(payload.data.role).toBeUndefined();
 });
+
+test('email confirmation keeps token out of request URLs and waits for explicit confirmation',async({page})=>{
+ let verification:any=null;const token='a'.repeat(64);const urls:string[]=[];page.on('request',r=>urls.push(r.url()));
+ await page.route(auth+'/auth/v1/verify',route=>{verification=route.request().postDataJSON();return route.fulfill({status:403,json:{msg:'Token has expired or is invalid',error_code:'otp_expired'}});});
+ await page.goto('/auth/confirm#token_hash='+token+'&type=email');await expect(page.getByRole('heading',{name:'Bekräfta din e-postadress'})).toBeVisible();await expect(page).toHaveURL(/\/auth\/confirm$/);expect(verification).toBeNull();expect(urls.every(u=>!u.includes(token))).toBe(true);await page.getByRole('button',{name:'Bekräfta e-postadress',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();expect(verification).toMatchObject({token_hash:token,type:'email'});
+});
+test('invalid confirmation does not call Auth or offer confirmation',async({page})=>{await page.goto('/auth/confirm#token_hash=bad&type=admin');await expect(page.getByText(/Länken saknas eller är ogiltig/)).toBeVisible();await expect(page.getByRole('button',{name:'Bekräfta e-postadress',exact:true})).toHaveCount(0);});
