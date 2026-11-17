@@ -1,13 +1,12 @@
+import {currentSession,bounded} from "./session";
 import {requestJson} from "../../packages/http/src/index";
 import {restartableFactors} from "../../packages/workspace/src/index";
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, apiUrl, friendlyError,displayError } from './client';
 export async function accountApi(path: string, orgId: string | null, body?: Record<string, unknown>) {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session)
-        throw Error('AUTH_REQUIRED');
-    const result=await requestJson(apiUrl+path+(body?'':orgId?'?organizationId='+encodeURIComponent(orgId):''),{method:body?'POST':'GET',headers:{Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify({...body,organizationId:orgId})}:{})});
+    const session = await currentSession();
+    const result=await requestJson(apiUrl+path+(body?'':orgId?'?organizationId='+encodeURIComponent(orgId):''),{method:body?'POST':'GET',headers:{Authorization:`Bearer ${session.access_token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify({...body,organizationId:orgId})}:{})});
     return result.data;
 }
 function useOperation() { const [busy, setBusy] = useState(false), [message, setMessage] = useState(''); async function run(fn: () => Promise<void>) { if (busy)
@@ -72,11 +71,11 @@ export function AccountSecurity() {
         qr: string;
         secret: string;
     } | null>(null), [nonceSent, setNonceSent] = useState(false);
-    async function load() { const r = await supabase.auth.mfa.listFactors(); if (r.error)
+    async function load() { const r = await bounded(supabase.auth.mfa.listFactors(),'SESSION_TIMEOUT',8000); if (r.error)
         throw r.error; setFactors(r.data.totp); setPending(restartableFactors(r.data.all)); }
     useEffect(() => { op.run(load); }, []);
     return <section className="panel detail-panel full-grid"><h2>Kontosäkerhet</h2>{op.message && <p role="status">{op.message}</p>}<h3>Tvåstegsverifiering</h3><p>Använd en autentiseringsapp för en extra kontroll vid inloggning. Företagets behörigheter gäller fortfarande.</p>
- {pending.length>0&&!enrollment&&<div className="mfa-pending"><p>En tidigare inställning av autentiseringsapp blev inte färdig. Du kan ta bort den ofärdiga inställningen och börja om. Verifierade appar påverkas inte.</p><button className="secondary" disabled={op.busy} onClick={()=>{if(confirm('Ta bort den ofärdiga inställningen av autentiseringsapp?'))op.run(async()=>{const current=await supabase.auth.mfa.listFactors();if(current.error)throw current.error;for(const id of restartableFactors(current.data.all)){const r=await supabase.auth.mfa.unenroll({factorId:id});if(r.error)throw r.error;}await load();op.setMessage('Den ofärdiga inställningen är borttagen. Du kan ställa in appen på nytt.');});}}>Börja om inställningen</button></div>}
+ {pending.length>0&&!enrollment&&<div className="mfa-pending"><p>En tidigare inställning av autentiseringsapp blev inte färdig. Du kan ta bort den ofärdiga inställningen och börja om. Verifierade appar påverkas inte.</p><button className="secondary" disabled={op.busy} onClick={()=>{if(confirm('Ta bort den ofärdiga inställningen av autentiseringsapp?'))op.run(async()=>{const current=await bounded(supabase.auth.mfa.listFactors(),'SESSION_TIMEOUT',8000);if(current.error)throw current.error;for(const id of restartableFactors(current.data.all)){const r=await supabase.auth.mfa.unenroll({factorId:id});if(r.error)throw r.error;}await load();op.setMessage('Den ofärdiga inställningen är borttagen. Du kan ställa in appen på nytt.');});}}>Börja om inställningen</button></div>}
  {!factors.length && !pending.length && !enrollment && <button className="secondary" disabled={op.busy} onClick={() => op.run(async () => { const r = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Avtalslänk' }); if (r.error)
         throw r.error; setEnrollment({ id: r.data.id, qr: r.data.totp.qr_code, secret: r.data.totp.secret }); })}>Ställ in autentiseringsapp</button>}
  {enrollment && <div><img src={enrollment.qr} alt="QR-kod för autentiseringsapp" width={180} height={180}/><label>Manuell inställningsnyckel<input readOnly value={enrollment.secret}/></label></div>}

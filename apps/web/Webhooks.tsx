@@ -1,3 +1,4 @@
+import {currentSession} from "./session";
 import {accountApi} from "./AccountOperations";
 import {requestJson} from "../../packages/http/src/index";
 import React, { useEffect, useState } from "react";
@@ -26,11 +27,11 @@ export default function Webhooks({ orgId }: { orgId: string }) {
     setBusy(true);
     setError("");
     try {
-      const { data } = await supabase.auth.getSession();
+      const session=await currentSession();
       const result = await requestJson(apiUrl + "/v1/webhooks", {
         method: "POST",
         headers: {
-          authorization: `Bearer ${data.session?.access_token}`,
+          authorization: `Bearer ${session.access_token}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({ ...(body as object), organizationId: orgId }),

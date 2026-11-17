@@ -1,3 +1,4 @@
+import {currentSession} from "./session";
 import {TemplateApply} from "./TemplateApply";
 import {moveField,copyField,validateEditorFields} from "../../packages/editor/src/index";
 import {requestJson} from "../../packages/http/src/index";
@@ -30,8 +31,8 @@ export async function envelopeApi(
   operation: string,
   body?: unknown,
 ) {
-  const { data } = await supabase.auth.getSession();
-  const result=await requestJson(`${apiUrl}/v1/envelopes/${id}/${operation}?organizationId=${orgId}`,{method:body===undefined?'GET':'POST',headers:{authorization:`Bearer ${data.session?.access_token}`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify({...body as object,organizationId:orgId})})});
+  const session=await currentSession();
+  const result=await requestJson(`${apiUrl}/v1/envelopes/${id}/${operation}?organizationId=${orgId}`,{method:body===undefined?'GET':'POST',headers:{authorization:`Bearer ${session.access_token}`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify({...body as object,organizationId:orgId})})});
   return result.data;
 }
 export function SigningPreparation({
@@ -428,12 +429,12 @@ export function DeliveryHistory({
         <button
           className="secondary"
           onClick={async () => {
-            const { data } = await supabase.auth.getSession();
+            const session=await currentSession();
             const r = await fetch(
               `${apiUrl}/v1/envelopes/${envelopeId}/final?organizationId=${orgId}`,
               {
                 headers: {
-                  authorization: `Bearer ${data.session?.access_token}`,
+                  authorization: `Bearer ${session.access_token}`,
                 },
               },
             );

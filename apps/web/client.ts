@@ -17,6 +17,9 @@ export const apiUrl =
   import.meta.env.VITE_API_URL || `${url}/functions/v1/avtalslank-api`;
 export const friendlyError = (message: string) =>
   ({
+    SESSION_TIMEOUT: "Inloggningssessionen svarar inte. Försök igen eller öppna inloggningen på nytt.",
+    WORKSPACE_TIMEOUT: "Arbetsytan kunde inte läsas in. Försök igen.",
+    AUTH_REQUIRED: "Logga in igen för att fortsätta.",
     COMPANY_ALREADY_REGISTERED: "Företaget har redan en arbetsyta. Be en befintlig ägare bjuda in dig.",
     INVALID_REGISTRATION: "Kontrollera kontotyp, namn och organisationsnummer eller personnummer. Alla obligatoriska uppgifter måste vara korrekt ifyllda.",
     COMPANY_ACCOUNT_REQUIRED: "Den här funktionen kräver en företagsarbetsyta.",    IDEMPOTENCY_CONFLICT: "Referensen har redan använts för ett annat innehåll. Läs in filen igen för en ny import. Kontrollera historiken först om utfallet var osäkert.",

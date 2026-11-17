@@ -1,3 +1,4 @@
+import {bounded} from "./session";
 import {SignedAgreementSearch,PriceReview,RecipientCompany} from "./SignedAgreements";
 import {MyCommercial} from "./CommercialAdmin";
 import AuthConfirmation from "./AuthConfirmation";
@@ -158,21 +159,25 @@ function App() {
       setLoading(false);
       return;
     }
-    let active=true;const timer=setTimeout(()=>{if(active){setSessionError(true);setLoading(false);}},12000);
-    supabase.auth.getSession().then(({data,error})=>{if(!active)return;clearTimeout(timer);if(error){setSessionError(true);}else{setSession(data.session);setSessionError(false);}setLoading(false);}).catch(()=>{if(active){clearTimeout(timer);setSessionError(true);setLoading(false);}});
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    let active=true;let authEvents=0;const timer=setTimeout(()=>{if(active){setSessionError(true);setLoading(false);}},12000);
+    supabase.auth.getSession().then(({data,error})=>{if(!active||authEvents>0)return;clearTimeout(timer);if(error){setSessionError(true);}else{setSession(data.session);setSessionError(false);}setLoading(false);}).catch(()=>{if(active&&authEvents===0){clearTimeout(timer);setSessionError(true);setLoading(false);}});
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => {if(active){authEvents++;clearTimeout(timer);setSession(s);setLoading(false);setSessionError(false);}});
     return () => {active=false;clearTimeout(timer);data.subscription.unsubscribe();};
   }, []);
+  const orgLoadVersion=useRef(0);
   async function loadOrgs() {
-    const { data, error } = await supabase
+    const version=++orgLoadVersion.current;const user=scope.current.split(':')[0];
+    const { data, error } = await bounded(supabase
       .from("al_organizations")
       .select("id,name,registration_number,kind")
-      .order("created_at");
+      .order("created_at"),'WORKSPACE_TIMEOUT');
+    if(version!==orgLoadVersion.current||user!==scope.current.split(':')[0])return false;
     if (error) throw error;
     setOrgs(data ?? []);
     setOrgId((old) =>
       (data ?? []).some((o) => o.id === old) ? old : (data?.[0]?.id ?? ""),
     );
+    return true;
   }
   useEffect(() => {
     if (session) loadOrgs().catch(notify);
@@ -247,7 +252,7 @@ function App() {
   if (!session) return <Auth onError={notify} notice={notice} />;
   if(publicPath==="/admin")return <PlatformAdmin/>;
   return (
-    <RegistrationGate session={session} organizations={orgs} onComplete={async id=>{await loadOrgs();setOrgId(id);}}><div className="shell">
+    <RegistrationGate session={session} organizations={orgs} onComplete={async id=>{if(await loadOrgs())setOrgId(id);}}><div className="shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
         <Brand /><PlatformAdminLink/>
         <button className="organization" onClick={() => setModal("org")}>

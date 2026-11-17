@@ -1,0 +1,9 @@
+# Återbesök och kontoladdning 2026-11-17
+
+Fynd: accountApi väntade obegränsat på getSession innan HTTP-tidsgränsen ens startade. RegistrationGate hade ingen total tidsgräns, återhämtningsgrenen error användes inte och nätfel skickade användaren till kompletteringsformulär. Gate följde bara user.id och inte en förnyad token. Tidiga Auth-händelser avslutade inte startup-laddningen; ett sent resultat från initial getSession kunde skriva över nyare Auth-händelser. Sena arbetsytesvar kunde även skriva över en nyare användar-/laddningskontext.
+
+Rättat: gemensam currentSession med 6s tidsgräns och tydliga fel; samma sessionshämtning i konto-, signerings- och webhook-API-anrop. Gate använder försök-ID, cleanup och 20s totalgräns; fel visar återhämtning med Försök igen och ny inloggningslänk, aldrig nyföretagsformulär på nätfel. Tokenändring startar ny auktoriserad inläsning. Klar profil måste även läsa in arbetsytorna innan appen visas. Arbetsyteinläsning har 12s gräns, användar- och versionskontroll. Auth-startup tar emot nya händelser utan att sena startresultat skriver över dem. MFA-faktorhämtning och plattforms-RPC har tidsgräns, och admin-startfel har återförsök i stället för evigt laddningstillstånd.
+
+Ingen authkontroll eller MFA-spärr har kopplats bort. Inga sessioner rensas automatiskt och ingen ofärdig mutation återförs automatiskt; privat profilprovisionering är fortsatt serveridempotent. En timeout avbryter väntan i UI men betyder inte att en servermutation säkert uteblev. Nästa Gate-försök läser alltid serverstatus först.
+
+Verifiering: npm run verify godkänd. Browserfall tillagda för återbesök/HTTP-fel, återhämtning utan ny registrering och fastnad kontoladdning med simulerad tid. Befintliga fall för signup, MFA, konto/profil, sessionrefresh-fel och återställning körs i CI. Den faktiska låsningen i användarens befintliga webbläsarsession har inte lästs av; fynden är kodverifierade häng-/racevägar och reproducerade fel-/timeoutfall.
