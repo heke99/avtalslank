@@ -1952,5 +1952,34 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await db.exec('reset role');await db.query("update al_private.api_entitlements set paid_until=now()-interval '1 second' where organization_id=$1",[oa]);await actor(a,'service_role');await assert.rejects(db.query('select public.al_api_payment_guard($1)',[hash]),/PAYMENT_REQUIRED/);
   });
 
+
+  await t.test('commercial prices preserve versions and company snapshots; paid API cannot be granted by price edits',async()=>{
+    await actor(b);await assert.rejects(db.query("select public.al_platform_commercial('catalog')"),/PLATFORM_ADMIN_REQUIRED/);
+    await actor(a);await assert.rejects(db.query("select public.al_platform_commercial('catalog')"),/MFA_REQUIRED/);
+    const admin=async()=>{await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');};
+    await admin();const call=async(action:string,payload:any={},org:string|null=null)=>(await one('select public.al_platform_commercial($1,$2,$3) data',[action,org,payload])).data;
+    const terms={name:'API Test',description:'Synthetic only',model:'subscription',interval:'month',baseOre:19900,documentOre:0,includedDocuments:100,userLimit:5,bindingMonths:2,noticeMonths:1,apiIncluded:true};
+    await assert.rejects(call('save_price',{code:'api',revision:0,reason:'Testing invalid money',terms:{...terms,baseOre:-1}}),/INVALID_PRICE/);
+    await call('save_price',{code:'api',revision:0,reason:'Initial synthetic catalog',terms});
+    let catalog=await call('catalog');assert.equal(catalog[0].revision,1);const priceId=catalog[0].id;
+    assert.deepEqual((await one('select public.al_public_prices() data')).data,[]);
+    await call('publish_price',{code:'api',revision:1,reason:'Publishing test catalog'});
+    await call('assign_offer',{priceId,revision:0,reference:'private-offer-a',baseOre:15000,reason:'Customer specific test offer'},oa);
+    await assert.rejects(call('assign_offer',{priceId,revision:0,reference:'duplicate',reason:'Reject stale assignment'},oa),/VERSION_CONFLICT/);
+    await call('save_price',{code:'api',revision:2,reason:'Update list price only',terms:{...terms,baseOre:29900}});
+    assert.equal((await one('select public.al_public_prices() data')).data[0].terms.baseOre,19900);
+    let company=await call('company',{},oa);assert.equal(company.offer.snapshot.baseOre,15000);
+    await call('publish_price',{code:'api',revision:3,reason:'Publish revised list price'});
+    assert.equal((await one('select public.al_public_prices() data')).data[0].terms.baseOre,29900);
+    await db.exec('reset role');await assert.rejects(db.query('update al_private.catalog_versions set terms=$1 where id=$2',[terms,priceId]),/IMMUTABLE_AUDIT/);
+    await actor(b);await assert.rejects(db.query('select public.al_my_commercial($1)',[oa]),/ACCESS_DENIED/);await assert.rejects(db.query('select * from al_private.commercial_offers'),/permission denied/);
+    await actor(a,'service_role');await assert.rejects(db.query('select public.al_api_payment_guard($1)',['f'.repeat(64)]),/PAYMENT_REQUIRED/);
+    await admin();await call('save_price',{code:'noapi',revision:0,reason:'Non API price test',terms:{...terms,apiIncluded:false}});catalog=await call('catalog');const noapi=catalog.find((c:any)=>c.code==='noapi');
+    await call('assign_offer',{priceId:noapi.id,revision:1,reference:'no-api-offer',reason:'Remove API from price scope'},oa);
+    await db.exec('reset role');await db.query("update al_private.api_entitlements set paid_until=now()+interval '1 day' where organization_id=$1",[oa]);await actor(a,'service_role');await assert.rejects(db.query('select public.al_api_payment_guard($1)',['f'.repeat(64)]),/PAYMENT_REQUIRED/);
+    await admin();await call('note',{body:'Synthetic support note',reason:'Record support context'},oa);company=await call('company',{},oa);assert.equal(company.history.length,2);assert.equal(company.notes[0].body,'Synthetic support note');
+    const billing=(await one('select public.al_platform_billing_status() data')).data;assert.equal(Number(billing.sync.find((j:any)=>j.status==='blocked').count),4);
+    await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({role:'anon'})]);await db.exec('set role anon');const pub=await one('select public.al_public_prices() data');assert.ok(!JSON.stringify(pub).includes('private-offer-a'));await assert.rejects(db.query("select public.al_platform_commercial('catalog')"),/permission denied/);
+  });
   await db.close();
 });

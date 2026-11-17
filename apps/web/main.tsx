@@ -1,3 +1,4 @@
+import {MyCommercial} from "./CommercialAdmin";
 import AuthConfirmation from "./AuthConfirmation";
 import PlatformAdmin,{PlatformAdminLink} from "./PlatformAdmin";
 import {RegistrationFields,RegistrationGate,AccountRegistrationSummary} from "./Registration";
@@ -599,7 +600,7 @@ function App() {
                   reload={reload}
                 />
               )}
-              {view === "workspace" && org.kind === "personal" && <section className="panel detail-panel"><h2>Din privata arbetsyta</h2><p>Här samlas dina egna avtal. Undertecknare bjuds in till respektive avtal, inte som medlemmar i arbetsytan.</p><AccountRegistrationSummary/></section>}
+              {view === "workspace" && org.kind === "personal" && <section className="panel detail-panel"><h2>Din privata arbetsyta</h2><p>Här samlas dina egna avtal. Undertecknare bjuds in till respektive avtal, inte som medlemmar i arbetsytan.</p><AccountRegistrationSummary/>{orgId&&<MyCommercial orgId={orgId}/>}</section>}
               {view === "settings" && (
                 <SettingsView
                   org={org}
@@ -1824,7 +1825,7 @@ function SettingsView({
   }, [org.id]);
   return (
     <div className="settings-grid">
-      <AccountRegistrationSummary/>
+      <AccountRegistrationSummary/>{org&&<MyCommercial orgId={org.id}/>}
       <AccountSecurity/>
       <LegalAccount/>
       <PlanPreference key={"plan-"+org.id} orgId={org.id}/>

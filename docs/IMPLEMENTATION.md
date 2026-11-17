@@ -128,3 +128,7 @@ Se [kontoregistrering](work/account-registration.md) för fält, privat profilko
 ## Plattformsadministration och API-betalrätt
 
 Se [plattformsadministration](work/platform-admin.md) för roller, MFA, revisionslogg och betalspärr.
+
+## Kommersiell administration
+
+Se [priser, bolagsupplägg och leverantörsbyte](work/commercial-admin.md). Betalningsanslutningen är fortfarande blockerad i väntan på separat Avtalslänk-konto och aktiv adapter/webhook-integration.

@@ -41,6 +41,7 @@ export const friendlyError = (message: string) =>
     PAYMENT_REQUIRED: "API kräver ett aktivt betalt upplägg. Kontakta oss för aktivering.",
     PLATFORM_ADMIN_REQUIRED: "Du saknar plattformsbehörighet.",
     REASON_REQUIRED: "Ange en anledning med minst tio tecken.",
+    INVALID_PRICE: "Kontrollera pris, paketnamn, modell och villkor. Priser får inte vara negativa.",
     INVALID_PAYMENT: "Kontrollera betalreferens och slutdatum.",
     EMAIL_VERIFICATION_REQUIRED: "Verifiera din e-postadress för att fortsätta.",
     LEGAL_VERSION_CHANGED: "Villkoren har uppdaterats. Läs in sidan igen och granska den aktuella versionen.",
