@@ -33,6 +33,12 @@ const safeCodes = new Set(["DOCUMENT_TARIFF_REQUIRED","PRICE_CHANGED","DOCUMENT_
   "DOCUMENT_SET_CHANGED",
   "WAITING_FOR_PREVIOUS_RECIPIENT",
   "INVALID_DECISION",
+  "INVALID_DATE",
+  "FIELD_TEXT_OVERFLOW",
+  "FIELD_TEXT_ENCODING",
+  "DECISION_TOO_LARGE",
+  "FINALIZATION_NOT_RETRYABLE",
+  "DELIVERY_NOT_RECOVERABLE",
   "REQUIRED_FIELD",
   "UNASSIGNED_FIELD",
   "INVALID_FIELD_ASSIGNMENT",
@@ -485,7 +491,7 @@ Deno.serve(async (req: Request) => {
             : e instanceof SyntaxError
               ? "INVALID_JSON"
               : "REQUEST_FAILED";
-    const status = [
+    const status = code === "BODY_TOO_LARGE" ? 413 : [
       "AUTH_REQUIRED",
       "INVALID_API_KEY",
       "INVALID_SIGNING_LINK",

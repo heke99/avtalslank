@@ -349,8 +349,10 @@ export async function finalPdf(
     });
     const text = v.replace(/[\r\n]+/g, " ");
     const size = Math.min(12, rect.height * 0.7);
-    if (font.widthOfTextAtSize(text, size) > rect.width)
-      throw Error("FIELD_TEXT_OVERFLOW");
+    let width: number;
+    try { width=font.widthOfTextAtSize(text,size); }
+    catch { throw Error("FIELD_TEXT_ENCODING"); }
+    if (width > rect.width) throw Error("FIELD_TEXT_OVERFLOW");
     page.drawText(text, {
       x: rect.x,
       y: rect.y + (rect.height - size) / 2,

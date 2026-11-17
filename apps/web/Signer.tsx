@@ -1,3 +1,4 @@
+import {signingDecisionFits} from "../../packages/signing/src/decision";
 import { normalizePersonalNumber } from "../../packages/signing/src/identity";
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, friendlyError } from "./client";
@@ -148,6 +149,10 @@ export default function Signer() {
         ...(intent === "approve" ? {identity:{name:signedName.trim(),personalNumber:normalizePersonalNumber(personalNumber)}} : {}),
         ...(intent === "decline" ? { reason } : {}),
       };
+    if(!signingDecisionFits(decision.current)){
+      decision.current=null;setBusy(false);
+      setError(friendlyError("DECISION_TOO_LARGE"));return;
+    }
     try {
       const response = await request("decide", { decision: decision.current });
       const r = await response.json();

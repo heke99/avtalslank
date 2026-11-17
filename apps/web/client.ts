@@ -83,6 +83,13 @@ export const friendlyError = (message: string) =>
       "Utskicket kunde inte startas. Ditt utkast är sparat. Kontakta support.",
     SIGNING_WORKER_NOT_READY:
       "Tjänsten kan inte ta emot utskicket just nu. Ditt utkast är sparat.",
+    INVALID_DATE: "Ange ett giltigt datum i fältet.",
+    FIELD_TEXT_OVERFLOW: "Texten ryms inte i fältet. Förkorta den eller be avsändaren förstora fältet.",
+    FIELD_TEXT_ENCODING: "Fältet innehåller tecken som PDF-filen inte kan återge. Kontakta avsändaren.",
+    DECISION_TOO_LARGE: "De ifyllda svaren är för stora tillsammans. Förkorta textfälten.",
+    INVALID_REGISTRATION_NUMBER: "Ange ett giltigt organisationsnummer.",
+    DELIVERY_NOT_RECOVERABLE: "Leveransen går inte att återställa i sitt nuvarande läge.",
+    FINALIZATION_NOT_RETRYABLE: "Slutjobbet går inte att starta om i sitt nuvarande läge.",
     INVALID_FIELD_ASSIGNMENT:
       "Kontrollera fältets dokument, sida och mottagare.",
 

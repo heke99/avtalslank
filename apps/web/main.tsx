@@ -144,9 +144,13 @@ function App() {
     [statusFilter,setStatusFilter]=useState(""),
     [dateFrom,setDateFrom]=useState(""),[dateTo,setDateTo]=useState(""),[agreementSort,setAgreementSort]=useState<"latest"|"oldest"|"title">("latest"),
     [query, setQuery] = useState(""),
+    [agreementPage,setAgreementPage]=useState(0),
     [mobileMenu, setMobileMenu] = useState(false);
   const org = orgs.find((o) => o.id === orgId);
-  const displayedAgreements=filterAgreements(envelopes,{organizationId:orgId,query:view==='overview'?'':query,status:view==='overview'?'':statusFilter,from:view==='overview'?'':dateFrom,to:view==='overview'?'':dateTo,sort:view==='overview'?'latest':agreementSort}).slice(0,view==='overview'?5:100);
+  const filteredAgreements=filterAgreements(envelopes,{organizationId:orgId,query:view==='overview'?'':query,status:view==='overview'?'':statusFilter,from:view==='overview'?'':dateFrom,to:view==='overview'?'':dateTo,sort:view==='overview'?'latest':agreementSort});
+  const page=Math.max(0,Math.min(agreementPage,Math.ceil(filteredAgreements.length/100)-1));
+  const displayedAgreements=view==='overview'?filteredAgreements.slice(0,5):filteredAgreements.slice(page*100,(page+1)*100);
+  useEffect(()=>setAgreementPage(0),[orgId,query,statusFilter,dateFrom,dateTo,agreementSort]);
   function exportAgreements(){const url=URL.createObjectURL(new Blob([agreementCsv(displayedAgreements,orgId,statusLabels)],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='avtalslank-avtal-'+orgId+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
   const scope = useRef("");
@@ -191,23 +195,27 @@ function App() {
     const requestedVersion=++reloadVersion.current;
     if (!orgId) return;
     const requestedScope = scope.current;
-    const [a, b, c] = await bounded(Promise.all([
-      supabase
-        .from("al_envelopes")
-        .select("*")
-        .eq("organization_id", orgId)
-        .order("updated_at", { ascending: false }),
-      supabase
-        .from("al_templates")
-        .select("*")
-        .eq("organization_id", orgId)
-        .order("updated_at", { ascending: false }),
+    const pageSize=500;
+    async function loadEnvelopeRows(){
+      const result:Envelope[]=[];
+      for(let start=0;;start+=pageSize){
+        const page=await bounded(supabase.from("al_envelopes").select("*").eq("organization_id",orgId)
+          .order("updated_at",{ascending:false}).order("id",{ascending:false}).range(start,start+pageSize-1));
+        if(page.error)throw page.error;
+        if(scope.current!==requestedScope||requestedVersion!==reloadVersion.current)return [];
+        const rows=page.data??[];
+        result.push(...rows);
+        if(rows.length<pageSize)return result;
+      }
+    }
+    const [a, b, c] = await Promise.all([
+      loadEnvelopeRows(),
+      bounded(supabase.from("al_templates").select("*").eq("organization_id",orgId).order("updated_at",{ascending:false})),
       rpc<ProviderCapability[]>("al_capabilities", {}),
-    ]));
+    ]);
     if (scope.current !== requestedScope || requestedVersion!==reloadVersion.current) return;
-    if (a.error) throw a.error;
     if (b.error) throw b.error;
-    setEnvelopes(a.data ?? []);
+    setEnvelopes(a);
     setTemplates(b.data ?? []);
     setCapabilities(c);
   }
@@ -380,7 +388,7 @@ function App() {
                 reload().catch(notify);
               }}
               onSaved={(v) => {
-                setSelected(v);
+                setSelected(current=>current?.id===selected.id&&v.organization_id===orgId?v:current);
                 reload().catch(notify);
               }}
             />
@@ -510,8 +518,8 @@ function App() {
                       </label></>
                     )}
                   </div>
-                  {view==='agreements'&&<SignedAgreementSearch key={orgId} orgId={orgId} onOpen={id=>action(async()=>{const r=await bounded(supabase.from('al_envelopes').select('*').eq('organization_id',orgId).eq('id',id).single());if(r.error)throw r.error;setSelected(r.data);})}/>}
-                  {view==='agreements'&&<div className="agreement-controls"><label>Sortera avtal<select value={agreementSort} onChange={e=>setAgreementSort(e.target.value as typeof agreementSort)}><option value="latest">Senast uppdaterade</option><option value="oldest">Äldst uppdaterade</option><option value="title">Avtalsnamn A–Ö</option></select></label><label>Uppdaterad från<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Uppdaterad till<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><button className="secondary" onClick={()=>{setQuery('');setStatusFilter('');setDateFrom('');setDateTo('');setAgreementSort('latest');}}>Rensa filter</button><button className="secondary" disabled={!displayedAgreements.length} onClick={exportAgreements}>Exportera visade avtal (CSV)</button><p>{displayedAgreements.length} visade av {envelopes.filter(e=>e.organization_id===orgId).length} inlästa avtal. Högst 100 rader visas och exporteras. Datum avser svensk tid.</p>{dateFrom&&dateTo&&dateFrom>dateTo&&<p role="alert">Fråndatum behöver vara före eller samma dag som tilldatum.</p>}</div>}
+                  {view==='agreements'&&<SignedAgreementSearch key={orgId} orgId={orgId} onOpen={id=>action(async()=>{const requestedScope=scope.current;const r=await bounded(supabase.from('al_envelopes').select('*').eq('organization_id',orgId).eq('id',id).single());if(scope.current!==requestedScope)return;if(r.error)throw r.error;setSelected(r.data);})}/>}
+                  {view==='agreements'&&<div className="agreement-controls"><label>Sortera avtal<select value={agreementSort} onChange={e=>setAgreementSort(e.target.value as typeof agreementSort)}><option value="latest">Senast uppdaterade</option><option value="oldest">Äldst uppdaterade</option><option value="title">Avtalsnamn A–Ö</option></select></label><label>Uppdaterad från<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Uppdaterad till<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><button className="secondary" onClick={()=>{setQuery('');setStatusFilter('');setDateFrom('');setDateTo('');setAgreementSort('latest');}}>Rensa filter</button><button className="secondary" disabled={!displayedAgreements.length} onClick={exportAgreements}>Exportera visade avtal (CSV)</button><p>{displayedAgreements.length} visade av {envelopes.filter(e=>e.organization_id===orgId).length} inlästa avtal. Upp till 100 rader per sida kan visas och exporteras. Datum avser svensk tid.</p>{dateFrom&&dateTo&&dateFrom>dateTo&&<p role="alert">Fråndatum behöver vara före eller samma dag som tilldatum.</p>}</div>}
                   {envelopes.length === 0 ? (
                     <Empty
                       icon={<FileText size={27} />}
@@ -574,6 +582,11 @@ function App() {
                             ))}
                         </tbody>
                       </table>
+                      {view==="agreements"&&filteredAgreements.length>100&&<div className="actions">
+                        <button className="secondary" disabled={page===0} onClick={()=>setAgreementPage(page-1)}>Föregående sida</button>
+                        <span>Sida {page+1} av {Math.ceil(filteredAgreements.length/100)}</span>
+                        <button className="secondary" disabled={(page+1)*100>=filteredAgreements.length} onClick={()=>setAgreementPage(page+1)}>Nästa sida</button>
+                      </div>}
                     </div>
                   )}
                 </section>
@@ -586,7 +599,7 @@ function App() {
                 </div>
               )}
               {view === "templates" && (
-                <Templates
+                <Templates key={orgId}
                   templates={templates}
                   orgId={orgId}
                   action={action}
@@ -1129,6 +1142,11 @@ function EnvelopeDetail({
     setRecipients(b.data ?? []);
     setEvents(c.data ?? []);
   }
+  async function reloadAfterEdit(){
+    const current=await envelopeApi(orgId,e.id,"prepare");
+    if(current.envelope.generation!==e.generation)onSaved({...e,generation:current.envelope.generation});
+    await load();
+  }
   useEffect(() => {
     action(load);
   }, [e.id]);
@@ -1185,7 +1203,7 @@ function EnvelopeDetail({
                 <strong>
                   {uploadStage || "Välj en PDF att ladda upp"}
                 </strong>
-                <span>Dokumentet kopplas till det här avtalet.</span>
+                <span>Högst 10 MB per PDF och 50 MB totalt per avtal.</span>
                 <input
                   aria-label="Ladda upp PDF"
                   type="file"
@@ -1199,6 +1217,7 @@ function EnvelopeDetail({
                       const name = safePdfFilename(file.name);
                       if (file.size > 10485760)
                         throw new Error("DOCUMENT_TOO_LARGE");
+                      if (file.size + documents.reduce((total, document) => total + document.byte_size,0)>52428800) throw Error("DOCUMENT_TOTAL_LIMIT");
                       const bytes = new Uint8Array(await file.arrayBuffer());
                       if (!isPdf(bytes)) throw new Error("INVALID_PDF");
                       const id = crypto.randomUUID();
@@ -1251,7 +1270,7 @@ function EnvelopeDetail({
                   document={d}
                   locked={locked}
                   action={action}
-                  reload={load}
+                  reload={reloadAfterEdit}
                   busy={busy}
                 />
                 <span className="file-icon">
@@ -1317,7 +1336,7 @@ function EnvelopeDetail({
                     recipient={r}
                     recipients={recipients}
                     action={action}
-                    reload={load}
+                    reload={reloadAfterEdit}
                     busy={busy}
                   />
                 )}
@@ -1470,6 +1489,7 @@ function EnvelopeDetail({
         {step === 3 && (
           <>
             <h2>En sista kontroll.</h2>
+            {dirty&&<p role="alert">Spara ändringarna under Uppgifter innan du skickar avtalet.</p>}
             <p className="muted">
               Se över dokument, mottagare och metod innan avtalet skickas.
             </p>
@@ -1513,7 +1533,7 @@ function EnvelopeDetail({
                 </p>
               </div>
             )}
-            {!locked&&<><PriceReview orgId={orgId} envelopeId={e.id} generation={e.generation} onAccept={setPriceHash}/>{recipients.map(r=><RecipientCompany key={r.id} orgId={orgId} envelopeId={e.id} recipient={r} onSaved={()=>{setPriceHash('');onSaved({...e,generation:e.generation+1});action(load);}}/>)}</>}
+            {!locked&&<><PriceReview orgId={orgId} envelopeId={e.id} generation={e.generation} documentIds={documents.map(d=>d.id)} recipientIds={recipients.map(r=>r.id)} onAccept={setPriceHash}/>{recipients.map(r=><RecipientCompany key={r.id} orgId={orgId} envelopeId={e.id} recipient={r} onSaved={()=>{setPriceHash('');onSaved({...e,generation:e.generation+1});action(load);}}/>)}</>}
             <div className="actions">
               <button
                 className="secondary danger"
@@ -1540,7 +1560,7 @@ function EnvelopeDetail({
               </button>
               <button
                 className="primary"
-                disabled={busy || locked || issues.length > 0 || !priceHash}
+                disabled={busy || locked || dirty || issues.length > 0 || !priceHash}
                 onClick={() =>
                   action(async () => {
                     onSaved({
@@ -1559,7 +1579,7 @@ function EnvelopeDetail({
           </>
         )}
       </section>
-      <DeliveryHistory orgId={orgId} envelopeId={e.id} status={e.status} />
+      <DeliveryHistory orgId={orgId} envelopeId={e.id} status={e.status} onRefresh={async()=>{const r=await bounded(supabase.from("al_envelopes").select("*").eq("organization_id",orgId).eq("id",e.id).single());if(r.error)throw r.error;if(r.data.status!==e.status)onSaved(r.data);}} />
       <section className="panel timeline">
         <h2>Händelser</h2>
         {events.length === 0 ? (
@@ -1597,6 +1617,7 @@ function Templates({
     [fields, setFields] = useState<TemplateField[]>([]),
     [open, setOpen] = useState(false),[query,setQuery]=useState(""),[sort,setSort]=useState("name");
   const shown=templateList(templates,query,sort);
+  const templateDirty=name!==(editing?.name??"")||JSON.stringify(fields)!==JSON.stringify(editing?.fields??[]);
   function begin(t?: Template) {
     setEditing(t ?? null);
     setName(t?.name ?? "");
@@ -1646,7 +1667,7 @@ function Templates({
       {open && (
         <Modal
           title={editing ? "Redigera fältmall" : "Ny fältmall"}
-          close={() => setOpen(false)}
+          close={() => {if(!templateDirty||confirm("Vill du stänga mallen och lämna osparade ändringar?"))setOpen(false);}}
         >
           {editing && (
             <div className="operation-tools">
@@ -1655,10 +1676,11 @@ function Templates({
                 disabled={busy}
                 onClick={() =>
                   action(async () => {
+                    validateTemplateFields(fields);
                     await rpc("al_save_template", {
                       p_org: orgId,
                       p_name: (editing.name + " – kopia").slice(0, 160),
-                      p_fields: editing.fields,
+                      p_fields: fields,
                     });
                     await reload();
                     setOpen(false);
@@ -1746,7 +1768,7 @@ function Templates({
                   >
                     <option value="text">Text</option>
                     <option value="date">Datum</option>
-                    <option value="signature">Underskrift</option>
+                    {f.type==="signature"&&<option value="signature" disabled>Underskrift (äldre mall)</option>}
                   </select>
                 </label>
                 <label>Mottagarroll<input aria-label={'Mottagarroll för fält '+(i+1)} maxLength={120} required value={f.recipientRole} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,recipientRole:ev.target.value}:v))}/></label>
@@ -1826,15 +1848,15 @@ function SettingsView({
     enabled: boolean;
   } | null>(null);
   useEffect(() => {
+    let active=true;
+    setBilling(null);
     action(async () => {
-      const { data, error } = await supabase
-        .from("al_billing_accounts")
-        .select("model,enabled")
-        .eq("organization_id", org.id)
-        .single();
+      const { data, error } = await bounded(supabase.rpc("al_my_payment_status",{p_org:org.id}));
+      if (!active) return;
       if (error) throw error;
       setBilling(data);
     });
+    return()=>{active=false;};
   }, [org.id]);
   return (
     <div className="settings-grid">
@@ -1856,9 +1878,9 @@ function SettingsView({
       </section>
       <section className="panel detail-panel">
         <h2>Betalning och förbrukning</h2>
-        <span className="badge draft">Ingen betalning aktiverad</span>
+        <span className="badge draft">{billing===null?"Betalningsstatus ej inläst":billing.enabled?"Aktiv betalperiod":"Ingen betalning aktiverad"}</span>
         <p>
-          Kontot har ingen aktiv betalplan. Ingen debitering startar utan en separat godkänd beställning.
+          {billing?.enabled?"Arbetsytan har en aktiv betalperiod.":"Debitering startar efter en separat godkänd beställning."}
         </p>
         <p className="muted">
           Pris och omfattning framgår av er godkända beställning. Kontakta oss för frågor om betalplanen.{" "}

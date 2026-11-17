@@ -26,6 +26,7 @@ export type EditorDocument = {
 export function templateList<T extends FieldTemplate>(templates: T[], query: string, sort: string) { const q = query.trim().toLocaleLowerCase('sv'); return templates.filter(t => (t.name + ' ' + t.fields.map(f => f.label + ' ' + f.recipientRole).join(' ')).toLocaleLowerCase('sv').includes(q)).toSorted((a, b) => (sort === 'fields' ? b.fields.length - a.fields.length : sort === 'version' ? b.version - a.version : a.name.localeCompare(b.name, 'sv')) || a.id.localeCompare(b.id)); }
 export function validateTemplateFields(fields: TemplateField[]) { try {
     validateFields(fields);
+    if (!fields.length || fields.some(f=>f.type==="signature")) throw Error();
     if (fields.length > 200 || fields.some(f => f.label.trim().length > 120 || f.recipientRole.trim().length > 120 || typeof f.required !== 'boolean'))
         throw Error();
 }
@@ -54,11 +55,11 @@ export function validateEditorFields(fields: Field[], documents: EditorDocument[
 export function applyTemplate(template: FieldTemplate, doc: EditorDocument, mapping: Record<string, string>, recipients: {
     id: string;
 }[], existing: Field[], newId: () => string = () => crypto.randomUUID()): Field[] {
-    validateTemplateFields(template.fields);
     if (!template.fields.length)
         throw Error('EMPTY_TEMPLATE');
     if (template.fields.some(f => f.type === 'signature'))
         throw Error('TEMPLATE_SIGNATURE_FIELD');
+    validateTemplateFields(template.fields);
     for (const role of templateRoles(template))
         if (!Object.hasOwn(mapping, role) || !recipients.some(r => r.id === mapping[role]))
             throw Error('ROLE_MAPPING_REQUIRED');

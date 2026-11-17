@@ -389,12 +389,13 @@ export function WorkspaceOperations({
     [members, setMembers] = useState<Member[]>([]),
     [events, setEvents] = useState<Activity[]>([]),
     [summary, setSummary] = useState<any>(null),
+    [activityMore,setActivityMore]=useState(true),
     [org, setOrg] = useState<any>(null),
     [userId, setUserId] = useState(""),
     [edit, setEdit] = useState<Contact | null>(null),
     [showArchived, setShowArchived] = useState(false),
     [search, setSearch] = useState(""),
-    [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+    [month, setMonth] = useState(() => new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Stockholm",year:"numeric",month:"2-digit"}).format(new Date()));
   async function load() {
     const [c, m, o, u] = await bounded(Promise.all([
       supabase
@@ -432,6 +433,7 @@ export function WorkspaceOperations({
       p_before_id: last?.id ?? null,
     });
     setEvents(more ? [...events, ...data] : data);
+    setActivityMore(data.length===50);
   }
   const visibleContacts=contacts.filter(c=>c.archived===showArchived&&[c.name,c.email,c.company].join(' ').toLocaleLowerCase('sv').includes(search.trim().toLocaleLowerCase('sv')));
   const visibleEvents=events.filter(e=>(activityLabel(e.kind)+' '+e.kind).toLocaleLowerCase('sv').includes(activitySearch.trim().toLocaleLowerCase('sv')));
@@ -752,7 +754,7 @@ export function WorkspaceOperations({
             </div>
           ))}
           {events.length>0&&visibleEvents.length===0&&<p role="status">Inga visade händelser matchar sökningen.</p>}
-          {events.length > 0 && (
+          {events.length > 0 && activityMore && (
             <button
               className="secondary"
               disabled={busy}
@@ -773,16 +775,9 @@ export function WorkspaceOperations({
             onSubmit={(e) => {
               e.preventDefault();
               action(async () => {
-                const from = new Date(month + "-01T00:00:00Z"),
-                  to = new Date(from);
-                to.setUTCMonth(to.getUTCMonth() + 1);
-                setSummary(
-                  await rpc("al_usage_summary", {
-                    p_org: orgId,
-                    p_from: from.toISOString(),
-                    p_to: to.toISOString(),
-                  }),
-                );
+                setSummary(null);
+                const data=await rpc("al_usage_by_month",{p_org:orgId,p_month:month});
+                setSummary({month,data});
               });
             }}
           >
@@ -791,7 +786,7 @@ export function WorkspaceOperations({
               <input
                 type="month"
                 value={month}
-                onChange={(e) => setMonth(e.target.value)}
+                disabled={busy} onChange={(e) => {setMonth(e.target.value);setSummary(null);}}
                 required
               />
             </label>
@@ -801,7 +796,7 @@ export function WorkspaceOperations({
           </form>
           {summary && (
             <div className="operation-form">
-              <h3>Registrerad användning</h3>
+              <h3>Registrerad användning för {summary.month}</h3>
               {[
                 ["envelope_completed", "Färdiga avtal"],
                 ["document_completed", "Färdiga dokument"],
@@ -809,16 +804,16 @@ export function WorkspaceOperations({
               ].map(([k, l]) => (
                 <div className="list-row" key={k}>
                   <span className="grow">{l}</span>
-                  <strong>{summary.counts[k] ?? 0}</strong>
+                  <strong>{summary.data.counts[k] ?? 0}</strong>
                 </div>
               ))}
               <p>
                 Betalning:{" "}
-                {summary.billing_enabled ? "Aktiverad" : "Inte aktiverad"}.
+                {summary.data.billing_enabled ? "Aktiverad" : "Inte aktiverad"}.
                 Prismodell:{" "}
-                {summary.billing_model === "unconfigured"
+                {summary.data.billing_model === "unconfigured"
                   ? "Inte bestämd"
-                  : summary.billing_model}
+                  : summary.data.billing_model}
                 .
               </p>
               <p className="muted">
