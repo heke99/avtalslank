@@ -848,3 +848,23 @@ test('returning to the same workspace ignores an older agreement response',async
  await page.route('**/rest/v1/al_envelopes*',async r=>{const old=first;first=false;const requested=new URL(r.request().url()).searchParams.get('organization_id')?.slice(3)??org;if(old){pending=true;await wait;}return r.fulfill({json:requested===org?[{id:'33333333-3333-4333-8333-333333333331',organization_id:org,title:old?'Gammalt avtalssvar':'Aktuellt avtalssvar',status:'draft',generation:1,updated_at:'2026-11-17T10:00:00Z'}]:[]});});
  await page.reload();await expect.poll(()=>pending).toBe(true);await page.getByLabel('Aktivt företag').selectOption(second);await page.getByLabel('Aktivt företag').selectOption(org);await expect(page.getByText('Aktuellt avtalssvar',{exact:true})).toBeVisible();release();await expect(page.getByText('Gammalt avtalssvar',{exact:true})).toHaveCount(0);await expect(page.getByText('Aktuellt avtalssvar',{exact:true})).toBeVisible();
 });
+
+test('delivery read errors clear after recovery and never imply no deliveries',async({page})=>{
+ await editorWorkspace(page);let broken=true;
+ await page.route('**/v1/envelopes/'+editorEnvelopeId+'/deliveries*',r=>broken?r.fulfill({status:400,json:{error:{code:'ACCESS_DENIED'}}}):r.fulfill({json:{data:[{id:'delivery',kind:'invitation',status:'completed'}]}}));
+ await page.getByRole('button',{name:'Uppdatera leveransstatus'}).click();await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByText('Inga utskick registrerade.',{exact:true})).toHaveCount(0);broken=false;await page.getByRole('button',{name:'Uppdatera leveransstatus'}).click();await expect(page.getByText('Signeringsinbjudan',{exact:true})).toBeVisible();await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('a late signing price from an older generation is discarded',async({page})=>{
+ await editorWorkspace(page);await page.getByRole('button',{name:'Spara och granska',exact:true}).click();let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);let requested=false;
+ await page.route('**/v1/envelopes/'+editorEnvelopeId+'/quote*',async r=>{requested=true;await wait;return r.fulfill({json:{data:{documents:1,signers:1,unitOre:1000,totalOre:1000,hash:'a'.repeat(64)}}});});
+ await page.route('**/v1/envelopes/'+editorEnvelopeId+'/party*',r=>r.fulfill({json:{data:{ok:true}}}));
+ await page.getByRole('button',{name:'Hämta aktuellt signeringspris'}).click();await expect.poll(()=>requested).toBe(true);await page.getByText('Företagsuppgifter för Mottagaren',{exact:true}).click();await page.getByRole('button',{name:'Spara mottagarens företag'}).click();await expect(page.getByRole('button',{name:'Hämta aktuellt signeringspris'})).toBeEnabled();const response=page.waitForResponse(r=>r.url().includes('/'+editorEnvelopeId+'/quote'));release();await (await response).finished();await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));await expect(page.getByLabel('Jag godkänner priset för detta utskick')).toHaveCount(0);
+});
+
+test('document tariff cannot be edited before loading and can recover explicitly',async({page})=>{
+ await workspace(page);await page.clock.install();let hang=true,requested=false;
+ await page.route('**/rest/v1/rpc/al_platform',r=>r.fulfill({json:r.request().postDataJSON().p_action==='status'?{admin:true,mfa:true}:[]}));
+ await page.route('**/rest/v1/rpc/al_admin_document_tariff',r=>{requested=true;if(hang)return new Promise<void>(()=>{});return r.fulfill({json:{tariff:{id:'tariff',version:1,document_ore:1500,included_signers:1,extra_signer_ore:200},charges:[]}});});
+ await page.goto('/admin');await expect.poll(()=>requested).toBe(true);await expect(page.getByRole('button',{name:'Spara dokumentpris',exact:true})).toBeDisabled();await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');hang=false;await page.getByRole('button',{name:'Hämta sparat dokumentpris'}).click();await expect(page.getByLabel('Dokumentpris i kronor')).toHaveValue('15');await expect(page.getByRole('button',{name:'Spara dokumentpris',exact:true})).toBeEnabled();
+});

@@ -1,4 +1,4 @@
-import {currentSession} from "./session";
+import {bounded,currentSession} from "./session";
 import {TemplateApply} from "./TemplateApply";
 import {moveField,copyField,validateEditorFields} from "../../packages/editor/src/index";
 import {requestJson} from "../../packages/http/src/index";
@@ -113,9 +113,9 @@ export function SigningPreparation({
             if (!doc) return;
             setBusy(true);
             try {
-              const { data, error } = await supabase.storage
+              const { data, error } = await bounded(supabase.storage
                 .from("al-documents")
-                .download(doc.storage_path);
+                .download(doc.storage_path));
               if (error) throw error;
               if(!alive.current)return;setError("");setPreview(URL.createObjectURL(data));
               setPreviewDoc(doc);
@@ -382,25 +382,24 @@ export function DeliveryHistory({
 }) {
   const [items, setItems] = useState<any[]>([]),
     [error, setError] = useState("");
+  const version=useRef(0);
+  const [busy,setBusy]=useState(false),[downloading,setDownloading]=useState(false),[loaded,setLoaded]=useState(false);
   async function load() {
-    try {
-      setItems(await envelopeApi(orgId, envelopeId, "deliveries"));
-    } catch (e) {
-      setError(displayError(e));
-    }
+    setBusy(true);setError("");const attempt=++version.current;
+    try {const data=await envelopeApi(orgId,envelopeId,"deliveries");if(attempt===version.current){setItems(data);setLoaded(true);}}
+    catch(e){if(attempt===version.current)setError(displayError(e));}
+    finally{if(attempt===version.current)setBusy(false);}
   }
-  useEffect(() => {
-    void load();
-  }, [orgId, envelopeId]);
+  useEffect(()=>{void load();return()=>{version.current++;};},[orgId,envelopeId]);
   return (
     <section className="operation-form">
       <h2>Leveranser och slutdokument</h2>
       {error && <p role="alert">{error}</p>}
-      <button className="secondary" onClick={load}>
+      <button className="secondary" disabled={busy} onClick={load}>
         Uppdatera leveransstatus
       </button>
       {items.length === 0 ? (
-        <p>Inga utskick registrerade.</p>
+        <p>{loaded&&!error?"Inga utskick registrerade.":busy?"Hämtar leveransstatus…":"Leveransstatus har inte hämtats."}</p>
       ) : (
         items.map((i) => (
           <div className="list-row" key={i.id}>
@@ -428,8 +427,9 @@ export function DeliveryHistory({
       {status === "completed" && (
         <button
           className="secondary"
+          disabled={downloading}
           onClick={async () => {
-            setError("");try{
+            setDownloading(true);setError("");const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),20000);try{
             const session=await currentSession();
             const r = await fetch(
               `${apiUrl}/v1/envelopes/${envelopeId}/final?organizationId=${orgId}`,
@@ -437,6 +437,7 @@ export function DeliveryHistory({
                 headers: {
                   authorization: `Bearer ${session.access_token}`,
                 },
+                signal:controller.signal,
               },
             );
             if (!r.ok) {
@@ -449,7 +450,7 @@ export function DeliveryHistory({
             a.download = "avtalslank-bevispaket.zip";
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
-            }catch(e){setError(displayError(e));}
+            }catch(e){setError(displayError(controller.signal.aborted?Error("REQUEST_TIMEOUT"):e));}finally{clearTimeout(timer);setDownloading(false);}
           }}
         >
           Hämta dokument och bevispaket
