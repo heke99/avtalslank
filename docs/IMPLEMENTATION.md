@@ -136,3 +136,7 @@ Se [priser, bolagsupplägg och leverantörsbyte](work/commercial-admin.md). Beta
 ## Signerad sökning och kostnad per PDF
 
 Se [signerad sökning och dokumentpris](work/signed-search-document-pricing.md) för serverquote, uttrycklig prisacceptans, låst pris, engångsregistrering och externa betalningsbegränsningar.
+
+## Pris- och betalningsgranskning
+
+Se [fynd, rättningar och verifieringsgränser](work/pricing-payment-review.md).

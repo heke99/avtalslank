@@ -38,6 +38,7 @@ export const friendlyError = (message: string) =>
     KEY_NOT_ACTIVE: "Nyckeln är utgången eller återkallad. Skapa en ny nyckel.",
     INVALID_KEY_EXPIRY: "Välj en giltighetstid mellan 1 och 365 dagar eller utan slutdatum.",
     INVALID_KEY: "Ange ett nyckelnamn och minst en giltig behörighet.",
+    PAYMENT_REVERSED: "Betalreferensen är återförd och kan inte aktiveras igen.",
     PAYMENT_REQUIRED: "API kräver ett aktivt betalt upplägg. Kontakta oss för aktivering.",
     PLATFORM_ADMIN_REQUIRED: "Du saknar plattformsbehörighet.",
     REASON_REQUIRED: "Ange en anledning med minst tio tecken.",

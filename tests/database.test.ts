@@ -60,6 +60,7 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
   await db.exec('reset role');
   await db.query("insert into al_private.api_entitlements(organization_id,model,paid_until,payment_reference) values($1,'subscription',now()+interval '1 day','fixture-a'),($2,'subscription',now()+interval '1 day','fixture-b')",[oa!,ob!]);
   await db.query("insert into al_private.document_tariffs(organization_id,version,document_ore,included_signers,extra_signer_ore) values($1,1,0,1,0),($2,1,0,1,0)",[oa!,ob!]);
+  await db.query("insert into al_private.payment_receipts(reference,organization_id,paid_until,recorded_by) values('fixture-a',$1,now()+interval '2 days',$3),('fixture-b',$2,now()+interval '2 days',$3)",[oa!,ob!,a]);
   await t.test("RLS denies reads/writes across organizations", async () => {
     await actor(a);
     assert.equal(
@@ -2014,6 +2015,33 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await db.exec('reset role');const globalOrg=crypto.randomUUID();await db.query("insert into public.al_organizations(id,name) values($1,'Default price fixture')",[globalOrg]);await db.query("insert into public.al_memberships(organization_id,user_id,role) values($1,$2,'owner')",[globalOrg,a]);
     for(const [org,expected] of [[globalOrg,2500],[oa,12500]] as const){const env=crypto.randomUUID(),doc=crypto.randomUUID();await db.query("insert into public.al_envelopes(id,organization_id,title,created_by) values($1,$2,'Price inheritance test',$3)",[env,org,a]);await db.query("insert into public.al_documents(id,organization_id,envelope_id,name,storage_path,sha256,byte_size) values($1,$2,$3,'test.pdf',$4,$5,5)",[doc,org,env,doc+'.pdf','a'.repeat(64)]);for(let i=1;i<=2;i++)await db.query("insert into public.al_recipients(organization_id,envelope_id,name,email,method,position) values($1,$2,'Test signer',$3,'email_approval',$4)",[org,env,'default'+i+'@example.invalid',i]);await actor(a,'service_role');assert.equal((await one('select public.al_document_quote($1,null,$2,$3) data',[a,org,env])).data.unitOre,expected);await db.exec('reset role');}
     await actor(b);await assert.rejects(db.query('select public.al_admin_document_tariff(null,$1)',[{version:1,documentOre:10,includedSigners:1,extraSignerOre:0,reason:'Unauthorized price change'}]),/PLATFORM_ADMIN_REQUIRED/);
+  });
+
+  await t.test('catalog document offers feed signing tariff and changed recipients invalidate accepted price',async()=>{
+    const admin=async()=>{await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');};await admin();
+    const terms={name:'Signer plan',description:'Test tariff',model:'per_document',interval:'month',baseOre:0,documentOre:1000,includedDocuments:0,userLimit:0,bindingMonths:0,noticeMonths:0,apiIncluded:true,includedSigners:2,extraSignerOre:300};
+    await one("select public.al_platform_commercial('save_price',null,$1) data",[{code:'signerplan',revision:0,reason:'Create integrated signer pricing',terms}]);
+    const catalog=(await one("select public.al_platform_commercial('catalog') data")).data;const plan=catalog.find((x:any)=>x.code==='signerplan');assert.equal(plan.terms.extraSignerOre,300);
+    const company=(await one("select public.al_platform_commercial('company',$1) data",[oa])).data;
+    await one("select public.al_platform_commercial('assign_offer',$1,$2) data",[oa,{priceId:plan.id,revision:company.offer.revision,reference:'integrated-signer-plan',reason:'Use package price for signing'}]);
+    await db.exec('reset role');const e=await one("select id,generation from public.al_envelopes where organization_id=$1 and title='Price inheritance test' limit 1",[oa]);await service();const q=(await one('select public.al_document_quote($1,null,$2,$3) data',[a,oa,e.id])).data;assert.equal(q.unitOre,1000);
+    await admin();await db.query("select public.al_add_recipient($1,$2,'Extra signer','extra-signer@example.invalid','email_approval',3)",[oa,e.id]);
+    await service();const next=(await one('select public.al_document_quote($1,null,$2,$3) data',[a,oa,e.id])).data;assert.equal(next.unitOre,1300);assert.notEqual(next.hash,q.hash);
+    const snap=await flow(e.id,'read');const payload={generation:e.generation,snapshot:snap,keyFingerprint:'f'.repeat(64),priceHash:q.hash,links:await Promise.all(snap.recipients.map(async(r:any)=>({id:crypto.randomUUID(),recipientId:r.id,tokenHash:await sha256Hex(crypto.randomUUID())})))};
+    await db.exec('reset role');await db.query("update public.al_documents set status='ready',page_count=1 where envelope_id=$1",[e.id]);await service();await db.query("select public.al_signing_worker('heartbeat',null,null,$1)",[{ready:true,keyFingerprint:'f'.repeat(64)}]);payload.snapshot=await flow(e.id,'read');
+    await assert.rejects(db.query("select public.al_flow_command($1,null,$2,$3,'send',$4)",[a,oa,e.id,payload]),/PRICE_CHANGED/);
+    await db.exec('reset role');assert.equal((await one('select count(*)::int n from al_private.signing_cases where envelope_id=$1',[e.id])).n,0);
+  });
+  await t.test('payment replay never rolls back later access; reversal blocks the exact receipt immediately',async()=>{
+    await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');
+    const first={model:'subscription',reference:'integrity-payment-1',paidUntil:new Date(Date.now()+2*86400000).toISOString(),reason:'Record first verified payment'};const second={...first,reference:'integrity-payment-2',paidUntil:new Date(Date.now()+3*86400000).toISOString()};
+    await one("select public.al_platform('record_payment',$1,$2) data",[oa,first]);await one("select public.al_platform('record_payment',$1,$2) data",[oa,second]);assert.equal((await one("select public.al_platform('record_payment',$1,$2) data",[oa,first])).data.replay,true);
+    await one("select public.al_platform('record_payment',$1,$2) data",[oa,{...first,reference:'integrity-late-short-period'}]);
+    const detail=(await one("select public.al_platform('detail',$1) data",[oa])).data;assert.equal(detail.entitlement.payment_reference,second.reference);
+    await one('select public.al_reverse_recorded_payment($1,$2) data',[first.reference,'Earlier receipt was reversed']);await service();await db.query('select public.al_api_payment_guard($1)',['f'.repeat(64)]);
+    await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');await one('select public.al_reverse_recorded_payment($1,$2) data',[second.reference,'Current receipt was reversed']);
+    await assert.rejects(db.query("select public.al_platform('record_payment',$1,$2)",[oa,second]),/PAYMENT_REVERSED/);await service();await assert.rejects(db.query('select public.al_api_payment_guard($1)',['f'.repeat(64)]),/PAYMENT_REQUIRED/);
+    await actor(b);await assert.rejects(db.query('select public.al_reverse_recorded_payment($1,$2)',[second.reference,'Unauthorized reversal attempt']),/PLATFORM_ADMIN_REQUIRED/);
   });
   await db.close();
 });

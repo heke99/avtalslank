@@ -131,3 +131,8 @@ test('public pricing refreshes the shared default document tariff automatically'
  await page.goto('/abonnemang');await expect(page.getByRole('heading',{name:'Per signerat dokument',exact:true})).toBeVisible();await expect(page.getByText(/per PDF med 1 signerare inkluderade/)).toContainText('15,00');
  price={...price,version:2,documentOre:2500};await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.getByText(/per PDF med 1 signerare inkluderade/)).toContainText('25,00');
 });
+
+test('published package price refreshes alongside the general document price',async({page})=>{
+ let baseOre=10000;await page.route(auth+'/rest/v1/rpc/al_public_document_price',r=>r.fulfill({json:null}));await page.route(auth+'/rest/v1/rpc/al_public_prices',r=>r.fulfill({json:[{code:'package-test',version:1,terms:{name:'Pakettest',description:'',baseOre,documentOre:0,interval:'month',includedDocuments:0,bindingMonths:0,noticeMonths:1}}]}));
+ await page.goto('/abonnemang');await expect(page.getByRole('row',{name:/Pakettest/})).toContainText('100,00');baseOre=20000;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.getByRole('row',{name:/Pakettest/})).toContainText('200,00');
+});
