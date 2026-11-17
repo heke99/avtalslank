@@ -27,6 +27,10 @@
     {
       "source": "/reset-password",
       "destination": "/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
     }
   ],
   "headers": [
@@ -94,6 +98,15 @@
     },
     {
       "source": "/reset-password",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/admin",
       "headers": [
         {
           "key": "X-Robots-Tag",
