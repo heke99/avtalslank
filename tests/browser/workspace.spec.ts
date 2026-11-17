@@ -830,3 +830,21 @@ test('price offer from the previous workspace disappears while the new offer loa
  await page.route('**/rest/v1/rpc/al_my_commercial',async r=>{const isSecond=r.request().postDataJSON().p_org===second;if(isSecond){pending=true;await wait;}return r.fulfill({json:{reference:'test',snapshot:{name:isSecond?'Bolag B:s pris':'Bolag A:s pris',baseOre:1000,documentOre:0,includedDocuments:0,bindingMonths:0,noticeMonths:0}}});});
  await page.reload();await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByText('Bolag A:s pris',{exact:true})).toBeVisible();await page.getByLabel('Aktivt företag').selectOption(second);await expect.poll(()=>pending).toBe(true);await expect(page.getByText('Bolag A:s pris',{exact:true})).toHaveCount(0);release();await expect(page.getByText('Bolag B:s pris',{exact:true})).toBeVisible();
 });
+
+test('unanswered draft mutation releases the form without automatically resubmitting',async({page})=>{
+ await workspace(page);await page.clock.install();let submissions=0;
+ await page.route('**/rest/v1/rpc/al_save_draft',r=>{submissions++;return new Promise<void>(()=>{});});
+ await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Obesvarat utkast');await page.getByRole('button',{name:'Skapa utkast',exact:true}).click();await expect.poll(()=>submissions).toBe(1);await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Kontrollera resultatet innan du försöker igen');await expect(page.getByRole('button',{name:'Skapa utkast',exact:true})).toBeEnabled();await page.clock.fastForward(30000);expect(submissions).toBe(1);await expect(page.getByLabel('Avtalets namn')).toHaveValue('Obesvarat utkast');
+});
+
+test('contact and team loading timeout releases unrelated workspace controls',async({page})=>{
+ await workspace(page);await page.clock.install();let requested=false;
+ await page.route('**/rest/v1/al_contacts*',r=>{requested=true;return new Promise<void>(()=>{});});await page.getByRole('button',{name:'Företag & team',exact:true}).click();await expect.poll(()=>requested).toBe(true);await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeEnabled();
+});
+
+test('returning to the same workspace ignores an older agreement response',async({page})=>{
+ await workspace(page);const second='99999999-9999-4999-8999-999999999999';await page.route('**/rest/v1/al_organizations*',r=>r.fulfill({json:[{id:org,name:'Bolag A'},{id:second,name:'Bolag B'}]}));
+ let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);let first=true,pending=false;
+ await page.route('**/rest/v1/al_envelopes*',async r=>{const old=first;first=false;const requested=new URL(r.request().url()).searchParams.get('organization_id')?.slice(3)??org;if(old){pending=true;await wait;}return r.fulfill({json:requested===org?[{id:'33333333-3333-4333-8333-333333333331',organization_id:org,title:old?'Gammalt avtalssvar':'Aktuellt avtalssvar',status:'draft',generation:1,updated_at:'2026-11-17T10:00:00Z'}]:[]});});
+ await page.reload();await expect.poll(()=>pending).toBe(true);await page.getByLabel('Aktivt företag').selectOption(second);await page.getByLabel('Aktivt företag').selectOption(org);await expect(page.getByText('Aktuellt avtalssvar',{exact:true})).toBeVisible();release();await expect(page.getByText('Gammalt avtalssvar',{exact:true})).toHaveCount(0);await expect(page.getByText('Aktuellt avtalssvar',{exact:true})).toBeVisible();
+});

@@ -186,10 +186,12 @@ function App() {
       setOrgId("");
     }
   }, [session?.user.id,session?.access_token]);
+  const reloadVersion=useRef(0);
   async function reload() {
+    const requestedVersion=++reloadVersion.current;
     if (!orgId) return;
     const requestedScope = scope.current;
-    const [a, b, c] = await Promise.all([
+    const [a, b, c] = await bounded(Promise.all([
       supabase
         .from("al_envelopes")
         .select("*")
@@ -201,8 +203,8 @@ function App() {
         .eq("organization_id", orgId)
         .order("updated_at", { ascending: false }),
       rpc<ProviderCapability[]>("al_capabilities", {}),
-    ]);
-    if (scope.current !== requestedScope) return;
+    ]));
+    if (scope.current !== requestedScope || requestedVersion!==reloadVersion.current) return;
     if (a.error) throw a.error;
     if (b.error) throw b.error;
     setEnvelopes(a.data ?? []);

@@ -1,3 +1,4 @@
+import {bounded} from './deadline';
 import { createClient } from "@supabase/supabase-js";
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -101,7 +102,7 @@ export async function rpc<T = unknown>(
   name: string,
   args: Record<string, unknown>,
 ): Promise<T> {
-  const { data, error } = await supabase.rpc(name, args);
+  const { data, error } = await bounded(supabase.rpc(name, args));
   if (error) throw error;
   return data as T;
 }

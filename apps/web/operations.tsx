@@ -1,3 +1,4 @@
+import {bounded} from './deadline';
 import {ContactTransfer} from "./ContactTransfer";
 import {TeamInvitations} from "./AccountOperations";
 import {activityLabel} from "../../packages/domain/src/activity";
@@ -192,12 +193,12 @@ export function DocumentTools({
         disabled={busy || d.status !== "ready"}
         onClick={() =>
           action(async () => {
-            const { data, error } = await supabase.storage
+            const { data, error } = await bounded(supabase.storage
               .from("al-documents")
-              .download(d.storage_path);
+              .download(d.storage_path));
             if (error) throw error;
             if (
-              (await sha256Hex(new Uint8Array(await data.arrayBuffer()))) !==
+              (await sha256Hex(new Uint8Array(await bounded(data.arrayBuffer())))) !==
               d.sha256
             )
               throw new Error("Dokumentets kontrollsumma stämmer inte.");
@@ -321,13 +322,13 @@ export function ContactPicker({
   useEffect(() => {
     let active = true;
     action(async () => {
-      const { data, error } = await supabase
+      const { data, error } = await bounded(supabase
         .from("al_contacts")
         .select("*")
         .eq("organization_id", orgId)
         .eq("archived", false)
         .order("name")
-        .limit(200);
+        .limit(200));
       if (error) throw error;
       if (active) setContacts(data ?? []);
     });
@@ -395,7 +396,7 @@ export function WorkspaceOperations({
     [search, setSearch] = useState(""),
     [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   async function load() {
-    const [c, m, o, u] = await Promise.all([
+    const [c, m, o, u] = await bounded(Promise.all([
       supabase
         .from("al_contacts")
         .select("*")
@@ -405,7 +406,7 @@ export function WorkspaceOperations({
       supabase.from("al_memberships").select("*").eq("organization_id", orgId),
       supabase.from("al_organizations").select("*").eq("id", orgId).single(),
       supabase.auth.getUser(),
-    ]);
+    ]));
     if (c.error || m.error || o.error || u.error)
       throw c.error || m.error || o.error || u.error;
     setContacts(c.data ?? []);
