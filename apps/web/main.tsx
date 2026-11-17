@@ -229,7 +229,7 @@ function App() {
   if (loading)
     return (
       <div className="center-screen">
-        <Brand /><PlatformAdminLink/>
+        <Brand />
         <p>Öppnar din arbetsyta…</p>
       </div>
     );
@@ -245,7 +245,7 @@ function App() {
   return (
     <RegistrationGate session={session} organizations={orgs} onComplete={async id=>{await loadOrgs();setOrgId(id);}}><div className="shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
-        <Brand />
+        <Brand /><PlatformAdminLink/>
         <button className="organization" onClick={() => setModal("org")}>
           <span className="org-avatar">{org?.name?.slice(0, 1) ?? "+"}</span>
           <span>
