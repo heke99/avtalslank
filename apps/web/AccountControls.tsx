@@ -23,7 +23,7 @@ export function SecurityKeys({ orgId }: {
     useEffect(() => { op.run(load); }, [orgId]);
     async function change(body: Record<string, unknown>) { setSecret(''); const v = await accountApi('/v1/security/keys', orgId, body); if (v.key)
         setSecret(v.key); await load(); }
-    return <section className="panel detail-panel account-controls"><h1>API-nycklar</h1><p>Ge varje integration en egen nyckel med de behörigheter den behöver. Endast ägare och administratörer kan hantera nycklar.</p>{op.error && <p role="alert">{op.error}</p>}
+    return <section className="panel detail-panel account-controls"><h1>API-nycklar</h1><p>Ge varje integration en egen nyckel med de behörigheter den behöver. Endast ägare och administratörer kan hantera nycklar. En skapad nyckel fungerar först när arbetsytan har ett giltigt betalt API-upplägg.</p>{op.error && <p role="alert">{op.error}</p>}
  <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); op.run(() => change({ action: 'create', name: f.get('name'), scopes: f.getAll('scope'), expiryDays: Number(f.get('expiryDays')) })); }}>
  <label>Nyckelnamn<input name="name" required minLength={2} maxLength={80}/></label>
  <label>Giltighetstid<select name="expiryDays" defaultValue="90"><option value="30">30 dagar</option><option value="90">90 dagar</option><option value="365">365 dagar</option><option value="0">Utan slutdatum</option></select></label>
