@@ -839,7 +839,7 @@ test('unanswered draft mutation releases the form without automatically resubmit
 
 test('contact and team loading timeout releases unrelated workspace controls',async({page})=>{
  await workspace(page);await page.clock.install();let requested=false;
- await page.route('**/rest/v1/al_contacts*',r=>{requested=true;return new Promise<void>(()=>{});});await page.getByRole('button',{name:'Företag & team',exact:true}).click();await expect.poll(()=>requested).toBe(true);await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeEnabled();
+ await page.route('**/rest/v1/al_contacts*',r=>{requested=true;return new Promise<void>(()=>{});});await page.getByRole('button',{name:'Företag & team',exact:true}).click();await expect.poll(()=>requested).toBe(true);await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');await page.getByRole('button',{name:'Översikt',exact:true}).click();await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeEnabled();
 });
 
 test('returning to the same workspace ignores an older agreement response',async({page})=>{
