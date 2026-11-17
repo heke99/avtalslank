@@ -1,0 +1,23 @@
+-- Current live tariff acceptance: synthetic DB records only; no Storage/worker/email effects.
+begin;
+insert into auth.users(id,email,email_confirmed_at) values('f8210001-0000-4000-8000-000000000001','tariff-review@example.invalid',now());
+select set_config('request.jwt.claims','{"role":"authenticated","sub":"f8210001-0000-4000-8000-000000000001"}',true);set local role authenticated;
+do $$declare o uuid;e jsonb;begin o:=public.al_create_organization('Isolated tariff verification');e:=public.al_save_draft(o,'Synthetic price verification');perform set_config('al.price_org',o::text,true);perform set_config('al.price_env',e->>'id',true);perform public.al_add_recipient(o,(e->>'id')::uuid,'Synthetic A','tariff-a@example.invalid','email_approval',1);perform public.al_add_recipient(o,(e->>'id')::uuid,'Synthetic B','tariff-b@example.invalid','email_approval',2);end $$;
+reset role;
+do $$declare d uuid:=gen_random_uuid();o uuid:=current_setting('al.price_org')::uuid;e uuid:=current_setting('al.price_env')::uuid;begin insert into public.al_documents(id,organization_id,envelope_id,name,storage_path,sha256,byte_size,status,page_count) values(d,o,e,'synthetic.pdf',o::text||'/'||e::text||'/'||d::text||'/original.pdf',repeat('a',64),5,'ready',1);end $$;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);set local role service_role;
+do $$declare q jsonb;begin q:=public.al_document_quote('f8210001-0000-4000-8000-000000000001',null,current_setting('al.price_org')::uuid,current_setting('al.price_env')::uuid);if (q->>'unitOre')::int<>250 or (q->>'totalOre')::int<>250 or (q->>'signers')::int<>2 then raise exception 'TWO_SIGNER_PRICE_WRONG';end if;end $$;
+reset role;select set_config('request.jwt.claims','{"role":"authenticated","sub":"f8210001-0000-4000-8000-000000000001"}',true);set local role authenticated;
+select public.al_add_recipient(current_setting('al.price_org')::uuid,current_setting('al.price_env')::uuid,'Synthetic C','tariff-c@example.invalid','email_approval',3);
+reset role;select set_config('request.jwt.claims','{"role":"service_role"}',true);set local role service_role;
+do $$declare q jsonb;begin q:=public.al_document_quote('f8210001-0000-4000-8000-000000000001',null,current_setting('al.price_org')::uuid,current_setting('al.price_env')::uuid);if (q->>'unitOre')::int<>390 or (q->>'totalOre')::int<>390 then raise exception 'THREE_SIGNER_PRICE_WRONG';end if;end $$;
+reset role;select set_config('request.jwt.claims','{"role":"authenticated","sub":"f8210001-0000-4000-8000-000000000001"}',true);set local role authenticated;
+select public.al_add_recipient(current_setting('al.price_org')::uuid,current_setting('al.price_env')::uuid,'Synthetic D','tariff-d@example.invalid','email_approval',4);
+reset role;select set_config('request.jwt.claims','{"role":"service_role"}',true);set local role service_role;
+do $$declare q jsonb;begin q:=public.al_document_quote('f8210001-0000-4000-8000-000000000001',null,current_setting('al.price_org')::uuid,current_setting('al.price_env')::uuid);if (q->>'unitOre')::int<>530 or (q->>'totalOre')::int<>530 then raise exception 'FOUR_SIGNER_PRICE_WRONG';end if;end $$;
+reset role;
+do $$declare d uuid:=gen_random_uuid();o uuid:=current_setting('al.price_org')::uuid;e uuid:=current_setting('al.price_env')::uuid;q jsonb;begin insert into public.al_documents(id,organization_id,envelope_id,name,storage_path,sha256,byte_size,status,page_count) values(d,o,e,'synthetic-second.pdf',o::text||'/'||e::text||'/'||d::text||'/original.pdf',repeat('b',64),5,'ready',1);end $$;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);set local role service_role;
+do $$declare q jsonb;begin q:=public.al_document_quote('f8210001-0000-4000-8000-000000000001',null,current_setting('al.price_org')::uuid,current_setting('al.price_env')::uuid);if (q->>'documents')::int<>2 or (q->>'totalOre')::int<>1060 then raise exception 'MULTI_PDF_PRICE_WRONG';end if;end $$;
+reset role;rollback;
+select 'two_three_four_signers_and_multi_pdf_passed_rolled_back' as result;
