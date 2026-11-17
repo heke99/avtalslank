@@ -1680,3 +1680,46 @@ input,select,textarea{border-radius:4px!important;color:#202a35;border-color:#cb
 .contact-transfer{border-top:1px solid #dce1e6;border-bottom:1px solid #dce1e6;margin:24px 0;padding:20px 0;display:grid;gap:15px;min-width:0}.contact-transfer>label,.contact-transfer .two-columns label{display:grid;gap:7px;font-size:13px}.contact-transfer .table-wrap{max-height:380px;overflow:auto}.contact-transfer small{display:block;overflow-wrap:anywhere;color:#657486}.contact-transfer td{overflow-wrap:anywhere;min-width:100px}.contact-transfer input[type=file]{max-width:100%}.contact-transfer>button{justify-self:start}
 /* Import review must retain every column; general agreement-table mobile hiding does not apply. */
 .contact-transfer table th,.contact-transfer table td{display:table-cell!important}.contact-transfer table{min-width:640px}.contact-transfer .table-wrap:focus-visible{outline:2px solid #243b53;outline-offset:3px}
+
+/* Shared actions: readable labels and consistent touch targets across app pages. */
+.primary,.secondary{font-size:13px;min-height:44px;white-space:normal;line-height:1.4;text-align:center;max-width:100%;}
+.text-button,.auth-links button{min-height:44px;line-height:1.4;}
+.primary:active:not(:disabled),.secondary:active:not(:disabled){transform:translateY(1px);}
+.danger-button{color:#9c3028;border-color:#e4bbb7;}
+.danger-button:hover:not(:disabled){background:#fff2f0;}
+.platform-nav-link{display:flex;align-items:center;min-height:44px;padding:12px 14px;margin:10px 0;border:1px solid var(--line);border-radius:6px;font-size:13px;font-weight:600;}
+.platform-nav-link:hover{background:#edf2ef;}
+.platform-admin{max-width:1200px;margin:0 auto;padding:32px 28px 64px;}
+.platform-header{display:flex;flex-direction:column;align-items:flex-start;gap:28px;margin-bottom:32px;}
+.platform-header h1{font-size:clamp(25px,4vw,36px);line-height:1.2;letter-spacing:-.035em;margin-bottom:12px;}
+.platform-header p,.platform-admin>p{color:var(--muted);line-height:1.6;}
+.platform-back{font-weight:600;}
+.platform-search{display:flex;align-items:flex-end;gap:12px;padding:20px;margin-bottom:12px;}
+.platform-search label{flex:1;max-width:540px;}
+.platform-admin label{display:flex;flex-direction:column;gap:8px;font-weight:600;font-size:13px;}
+.platform-admin input:not([type=checkbox]),.platform-admin select,.platform-admin textarea{width:100%;min-height:44px;padding:11px 12px;background:#fff;border:1px solid #cbd4cf;border-radius:6px;color:inherit;font:inherit;}
+.platform-admin textarea{min-height:90px;resize:vertical;}
+.platform-admin input[type=checkbox]{width:18px;height:18px;accent-color:#265b49;}
+.platform-table{overflow-x:auto;margin-top:20px;}
+.platform-table table{width:100%;border-collapse:collapse;min-width:620px;}
+.platform-table th,.platform-table td{padding:16px;text-align:left;border-bottom:1px solid var(--line);font-size:13px;}
+.platform-table th{color:var(--muted);background:#f0f4f2;font-size:12px;}
+.platform-table tbody tr:hover{background:#fafcfb;}
+.platform-detail{padding:28px;margin-top:28px;overflow-wrap:anywhere;}
+.platform-detail h2{font-size:24px;margin-bottom:10px;}
+.platform-detail h3{font-size:19px;border-top:1px solid var(--line);padding-top:24px;margin:28px 0 14px;}
+.platform-detail h4{font-size:15px;margin:0;}
+.platform-detail p{line-height:1.6;margin:10px 0 16px;}
+.platform-detail>button{margin:0 10px 12px 0;}
+.platform-detail>form{display:grid;gap:16px;max-width:620px;background:#f7f9f8;padding:20px;border:1px solid var(--line);border-radius:8px;margin:20px 0;}
+.platform-detail>form>button{justify-self:start;}
+.platform-member strong{font-size:14px;}
+.platform-member label:has(input[type=checkbox]){flex-direction:row;align-items:center;}
+.platform-security{max-width:700px;}
+.platform-security-intro{padding:22px 24px;background:#eaf1ed;border:1px solid #cfded4;border-radius:8px;margin-bottom:20px;}
+.platform-security-intro h2{font-size:20px;margin-bottom:10px;}
+.platform-security-intro p{line-height:1.6;}
+.security-gate{max-width:700px;margin:40px auto;padding:0 20px 40px;}
+.security-gate>header{display:grid;gap:16px;margin-bottom:24px;}
+.security-gate h1{font-size:28px;}
+@media(max-width:600px){.platform-admin{padding:20px 16px 40px;}.platform-header{gap:22px;margin-bottom:24px;}.platform-search{align-items:stretch;flex-direction:column;padding:16px;}.platform-search label{max-width:none;}.platform-detail{padding:18px;}.platform-detail>form{padding:16px;}.platform-detail>button{width:100%;margin-right:0;}.platform-detail>form>button{width:100%;}.security-gate{margin-top:24px;}}
