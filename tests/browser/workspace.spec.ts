@@ -868,3 +868,20 @@ test('document tariff cannot be edited before loading and can recover explicitly
  await page.route('**/rest/v1/rpc/al_admin_document_tariff',r=>{requested=true;if(hang)return new Promise<void>(()=>{});return r.fulfill({json:{tariff:{id:'tariff',version:1,document_ore:1500,included_signers:1,extra_signer_ore:200},charges:[]}});});
  await page.goto('/admin');await expect.poll(()=>requested).toBe(true);await expect(page.getByRole('button',{name:'Spara dokumentpris',exact:true})).toBeDisabled();await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');hang=false;await page.getByRole('button',{name:'Hämta sparat dokumentpris'}).click();await expect(page.getByLabel('Dokumentpris i kronor')).toHaveValue('15');await expect(page.getByRole('button',{name:'Spara dokumentpris',exact:true})).toBeEnabled();
 });
+
+test('failed MFA factor read does not offer new enrollment and can be refreshed',async({page})=>{
+ await workspace(page);let broken=true;
+ await page.route('**/auth/v1/user',r=>broken?r.fulfill({status:400,json:{code:'unexpected_failure',msg:'Cannot load factors'}}):r.fulfill({json:{id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors:[]}}));
+ await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByRole('button',{name:'Uppdatera säkerhetsstatus'})).toBeEnabled();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toHaveCount(0);broken=false;await page.getByRole('button',{name:'Uppdatera säkerhetsstatus'}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toBeVisible();
+});
+
+test('field template fetch timeout recovers without applying fields',async({page})=>{
+ await editorWorkspace(page);await page.getByRole('button',{name:/Dokument/}).first().click();await page.clock.install();let hang=true,requested=false;
+ await page.route('**/rest/v1/al_templates*',r=>{requested=true;if(hang)return new Promise<void>(()=>{});return r.fulfill({json:[editorTemplate]});});
+ await page.getByRole('button',{name:/Uppgifter/}).click();await expect.poll(()=>requested).toBe(true);await page.clock.fastForward(13000);await expect(page.getByRole('button',{name:'Hämta fältmallar igen'})).toBeVisible();hang=false;await page.getByRole('button',{name:'Hämta fältmallar igen'}).click();await expect(page.getByLabel('Fältmall att använda')).toBeEnabled();await page.getByLabel('Fältmall att använda').selectOption(editorTemplate.id);await expect(page.getByRole('button',{name:'Lägg in mallens fält'})).toBeDisabled();await expect(page.getByText('Dokumentfälten har osparade ändringar.',{exact:true})).toHaveCount(0);
+});
+
+test('a slow older CSV file cannot replace a later file selection',async({page})=>{
+ await workspace(page);await page.getByRole('button',{name:'Företag & team',exact:true}).click();await page.evaluate(()=>{const original=File.prototype.arrayBuffer;File.prototype.arrayBuffer=async function(){if(this.name==='slow.csv')await new Promise<void>(resolve=>(window as any).releaseOldCsv=resolve);return original.call(this);};});
+ await page.getByLabel('CSV-fil med kontakter').setInputFiles({name:'slow.csv',mimeType:'text/csv',buffer:Buffer.from('Namn;E-post\nGammal person;old@example.invalid')});await page.getByLabel('CSV-fil med kontakter').setInputFiles({name:'latest.csv',mimeType:'text/csv',buffer:Buffer.from('Namn;E-post\nSenaste personen;latest@example.invalid')});await expect(page.getByRole('cell',{name:'Senaste personen',exact:true})).toBeVisible();await page.evaluate(async()=>{(window as any).releaseOldCsv();await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));});await expect(page.getByRole('cell',{name:'Gammal person',exact:true})).toHaveCount(0);await expect(page.getByRole('cell',{name:'Senaste personen',exact:true})).toBeVisible();
+});

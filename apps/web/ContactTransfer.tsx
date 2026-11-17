@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import {bounded} from './deadline';
+import React, { useState, useRef, useEffect } from 'react';
 import { parseContactCsv, inspectContactRows, contactCsv, type ContactInput } from '../../packages/contacts/src/index';
 import { accountApi } from './AccountOperations';
 import { displayError } from './client';
@@ -9,6 +10,8 @@ export function ContactTransfer({ orgId, writable, visible, onImported }: {
     onImported: () => Promise<void>;
 }) {
     const [table, setTable] = useState<string[][]>([]), [delimiter, setDelimiter] = useState<',' | ';'>(';'), [source, setSource] = useState(''), [mapping, setMapping] = useState({ name: 0, email: 1, company: 2 }), [requestId, setRequestId] = useState(() => crypto.randomUUID()), [busy, setBusy] = useState(false), [error, setError] = useState(''), [result, setResult] = useState<any>(null), [history, setHistory] = useState<any[]>([]);
+    const readVersion=useRef(0),currentDelimiter=useRef(delimiter);currentDelimiter.current=delimiter;
+    useEffect(()=>()=>{readVersion.current++;},[]);
     function parse(text: string, sep: ',' | ';') { setTable([]); setResult(null); setError(''); setRequestId(crypto.randomUUID()); try {
         const rows = parseContactCsv(text, sep);
         setTable(rows);
@@ -34,16 +37,16 @@ export function ContactTransfer({ orgId, writable, visible, onImported }: {
     return <section className="contact-transfer"><h3>Import och export</h3><p>CSV med högst 200 kontakter per import. Befintliga e-postadresser, även arkiverade, lämnas oförändrade. Ingen inbjudan eller e-post skickas.</p>
  <button type="button" className="secondary" disabled={busy || !visible.length} onClick={() => { const url = URL.createObjectURL(new Blob([contactCsv(visible)], { type: 'text/csv;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = 'avtalslank-kontakter.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Exportera visade kontakter ({visible.length})</button><p className="muted">Exporten omfattar sökresultatet i den inlästa kontaktlistan, högst 500 kontakter.</p>
  {writable && <><label>CSV-fil<input aria-label="CSV-fil med kontakter" type="file" accept=".csv,text/csv" disabled={busy} onChange={async (e) => { const file = e.target.files?.[0]; e.target.value = ''; if (!file)
-            return; setError(''); setResult(null); setTable([]); setSource(''); if (file.size > 262144) {
+            return; const attempt=++readVersion.current;setError(''); setResult(null); setTable([]); setSource(''); if (file.size > 262144) {
             setError('CSV-filen får vara högst 256 KB.');
             return;
         } try {
-            const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
-            setSource(text);
-            parse(text, delimiter);
+            const text = new TextDecoder('utf-8', { fatal: true }).decode(await bounded(file.arrayBuffer()));
+            if(attempt!==readVersion.current)return;setSource(text);
+            parse(text, currentDelimiter.current);
         }
-        catch {
-            setError('Filen måste vara en UTF-8-kodad CSV-fil.');
+        catch (e) {
+            if(attempt!==readVersion.current)return;setError((e as Error).message==='REQUEST_TIMEOUT'?displayError(e):'Filen måste vara en UTF-8-kodad CSV-fil.');
         } }}/></label><label>Avgränsare<select aria-label="CSV-avgränsare" disabled={busy} value={delimiter} onChange={e => { const sep = e.target.value as ',' | ';'; setDelimiter(sep); if (source)
             parse(source, sep); }}><option value=";">Semikolon</option><option value=",">Komma</option></select></label>
  {table.length > 0 && <><div className="two-columns">{(['name', 'email', 'company'] as const).map(k => <label key={k}>{{ name: 'Namnkolumn', email: 'E-postkolumn', company: 'Företagskolumn' }[k]}<select aria-label={{ name: 'Namnkolumn', email: 'E-postkolumn', company: 'Företagskolumn' }[k]} disabled={busy || !!result} value={mapping[k]} onChange={e => { setMapping({ ...mapping, [k]: Number(e.target.value) }); setRequestId(crypto.randomUUID()); setResult(null); }}>{k === 'company' && <option value={-1}>Ingen företagskolumn</option>}{table[0].map((h, i) => <option key={i} value={i}>{i + 1}. {h || '(utan rubrik)'}</option>)}</select></label>)}</div><h4>Förhandsgranskning – {preview.length} kontakter</h4>{mappingError && <p role="alert">{mappingError}</p>}{tooLarge && <p role="alert">Importen är för stor för ett anrop. Dela upp den i mindre filer.</p>}<p className="muted">Förhandsgranskningstabellen kan rullas i sidled.</p><div className="table-wrap" role="region" aria-label="Förhandsgranskning av kontaktimport" tabIndex={0}><table><thead><tr><th>CSV-post</th><th>Namn</th><th>E-post</th><th>Företag</th><th>Kontroll</th></tr></thead><tbody>{preview.map(r => <tr key={r.row}><td>{r.row}</td><td>{r.contact.name}</td><td>{r.contact.email}</td><td>{r.contact.company}</td><td>{r.errors.join(' ') || 'OK'}</td></tr>)}</tbody></table></div><p>Ingen kontakt sparas förrän du bekräftar importen. Alla fel behöver rättas först.</p><button type="button" className="primary" disabled={busy || !valid || tooLarge || !!result} onClick={async () => { setBusy(true); setError(''); try {

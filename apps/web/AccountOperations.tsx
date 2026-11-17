@@ -71,12 +71,13 @@ export function AccountSecurity() {
         qr: string;
         secret: string;
     } | null>(null), [nonceSent, setNonceSent] = useState(false);
-    async function load() { const r = await bounded(supabase.auth.mfa.listFactors(),'SESSION_TIMEOUT',8000); if (r.error)
-        throw r.error; setFactors(r.data.totp); setPending(restartableFactors(r.data.all)); }
+    const [factorsLoaded,setFactorsLoaded]=useState(false);
+    async function load() { setFactorsLoaded(false);const r = await bounded(supabase.auth.mfa.listFactors(),'SESSION_TIMEOUT',8000); if (r.error)
+        throw r.error; setFactors(r.data.totp); setPending(restartableFactors(r.data.all));setFactorsLoaded(true); }
     useEffect(() => { op.run(load); }, []);
-    return <section className="panel detail-panel full-grid"><h2>Kontosäkerhet</h2>{op.message && <p role="status">{op.message}</p>}<h3>Tvåstegsverifiering</h3><p>Använd en autentiseringsapp för en extra kontroll vid inloggning. Företagets behörigheter gäller fortfarande.</p>
+    return <section className="panel detail-panel full-grid"><h2>Kontosäkerhet</h2>{op.message && <p role="status">{op.message}</p>}<button className="secondary" disabled={op.busy} onClick={()=>op.run(load)}>Uppdatera säkerhetsstatus</button><h3>Tvåstegsverifiering</h3><p>Använd en autentiseringsapp för en extra kontroll vid inloggning. Företagets behörigheter gäller fortfarande.</p>
  {pending.length>0&&!enrollment&&<div className="mfa-pending"><p>En tidigare inställning av autentiseringsapp blev inte färdig. Du kan ta bort den ofärdiga inställningen och börja om. Verifierade appar påverkas inte.</p><button className="secondary" disabled={op.busy} onClick={()=>{if(confirm('Ta bort den ofärdiga inställningen av autentiseringsapp?'))op.run(async()=>{const current=await bounded(supabase.auth.mfa.listFactors(),'SESSION_TIMEOUT',8000);if(current.error)throw current.error;for(const id of restartableFactors(current.data.all)){const r=await supabase.auth.mfa.unenroll({factorId:id});if(r.error)throw r.error;}await load();op.setMessage('Den ofärdiga inställningen är borttagen. Du kan ställa in appen på nytt.');});}}>Börja om inställningen</button></div>}
- {!factors.length && !pending.length && !enrollment && <button className="secondary" disabled={op.busy} onClick={() => op.run(async () => { const r = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Avtalslänk' }); if (r.error)
+ {factorsLoaded && !factors.length && !pending.length && !enrollment && <button className="secondary" disabled={op.busy} onClick={() => op.run(async () => { const r = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Avtalslänk' }); if (r.error)
         throw r.error; setEnrollment({ id: r.data.id, qr: r.data.totp.qr_code, secret: r.data.totp.secret }); })}>Ställ in autentiseringsapp</button>}
  {enrollment && <div><img src={enrollment.qr} alt="QR-kod för autentiseringsapp" width={180} height={180}/><label>Manuell inställningsnyckel<input readOnly value={enrollment.secret}/></label></div>}
  {(enrollment || factors.length > 0) && <form onSubmit={e => { e.preventDefault(); const code = String(new FormData(e.currentTarget).get('code')); op.run(async () => { const id = enrollment?.id ?? factors[0].id; const c = await supabase.auth.mfa.challenge({ factorId: id }); if (c.error)
