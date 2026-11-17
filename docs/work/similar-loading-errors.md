@@ -11,4 +11,6 @@ Rättade fynd:
 
 Kontrollerat befintligt skydd: huvudappen hade redan key={orgId} för API-nycklar, webhooks och planintresse. Detta var inte ett nytt konstaterat fel. Browserregressionen bevarar nyckelisolation och ignorerande av gamla svar.
 
-Verifiering: npm run verify godkänd (117 tester, Edge/web typecheck, provenance och produktionsbygge). Nya browserfall: fastnad signeringsläsning, långsam statuspoll utan överlappning, webhook-timeout med läsåterhämtning, arbetsytebyte med sent nyckelsvar. Browserfallen körs i CI; syntetiska nätverkssvar, inte verklig kundsignering eller MFA. Databas/RLS har inte ändrats.
+Verifiering: npm run verify godkänd (117 tester, Edge/web typecheck, provenance och produktionsbygge). Nya browserfall: fastnad signeringsläsning, långsam statuspoll utan överlappning, webhook-timeout med läsåterhämtning, arbetsytebyte med sent nyckelsvar samt borttagning av gammalt prisupplägg medan det nya hämtas. Browserfallen körs i CI; syntetiska nätverkssvar, inte verklig kundsignering eller MFA. Databas/RLS har inte ändrats.
+
+Lokal Chromium kunde inte starta (SIGABRT i container); detta är inte ett utfört browsertest. Produktionsbygget 981e135 är READY i Vercel. Browserutfall verifieras i GitHub Actions innan slutrapport.

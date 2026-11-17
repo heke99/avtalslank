@@ -822,3 +822,11 @@ test('registration data conflicts remain editable instead of being treated as ne
  // Existing key isolation must remain intact while read timeouts change.
  await page.getByRole('button',{name:'Företag & team',exact:true}).click();await page.getByRole('button',{name:'API & integration',exact:true}).click();await expect.poll(()=>pending).toBe(true);await page.getByLabel('Aktivt företag').selectOption(second);release();await expect(page.getByText('al_live_ui-only-test-key',{exact:true})).toHaveCount(0);await expect(page.getByText('Sent svar från Bolag A',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Skapa API-nyckel',exact:true})).toBeEnabled();
  });
+
+test('price offer from the previous workspace disappears while the new offer loads',async({page})=>{
+ await workspace(page);const second='99999999-9999-4999-8999-999999999999';
+ await page.route('**/rest/v1/al_organizations*',r=>r.fulfill({json:[{id:org,name:'Bolag A'},{id:second,name:'Bolag B'}]}));
+ let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);let pending=false;
+ await page.route('**/rest/v1/rpc/al_my_commercial',async r=>{const isSecond=r.request().postDataJSON().p_org===second;if(isSecond){pending=true;await wait;}return r.fulfill({json:{reference:'test',snapshot:{name:isSecond?'Bolag B:s pris':'Bolag A:s pris',baseOre:1000,documentOre:0,includedDocuments:0,bindingMonths:0,noticeMonths:0}}});});
+ await page.reload();await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByText('Bolag A:s pris',{exact:true})).toBeVisible();await page.getByLabel('Aktivt företag').selectOption(second);await expect.poll(()=>pending).toBe(true);await expect(page.getByText('Bolag A:s pris',{exact:true})).toHaveCount(0);release();await expect(page.getByText('Bolag B:s pris',{exact:true})).toBeVisible();
+});
