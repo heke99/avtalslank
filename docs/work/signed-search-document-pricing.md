@@ -15,3 +15,7 @@ Verifiering: npm run verify: 114 tester, typkontroller, proveniens och build god
 ## Produktionsutfall
 
 Runtime publicerat i c7e521ac9397fd85f53a9338054a58379c675d89. Vercel READY, Edge v16 aktiv. GitHub CI 44063974356: 114 kod/databastester och 46 browserfall godkända; workercontainer godkänd. Migrationerna 20261117101657 och 20261117101856 tillämpade. Efter färsk ready-heartbeat aktiverades email_approval enligt användarens begäran, med plattformsaudit. BankID/Freja/ritad signatur ändrades inte. Dokumentpris krävs fortfarande per arbetsyta och inga verkliga priser har hittats på; superadmin anger tariffen före första nya utskicket. Externa betalningsjobb kvar i blocked_provider.
+
+## Generellt offentligt dokumentpris
+
+2026-11-17: superadmin kan spara en global version via Generellt dokumentpris på hemsidan. organization_id=null markerar en global immutable tariff, med unik version och låst adminuppdatering. Offentlig RPC returnerar enbart generella prisfält, aldrig bolagspriser. /abonnemang nås via menyalternativet Priser och hämtar aktuell global tariff vid öppning, fokus och var 15:e sekund. Ingen webbdeploy behövs för prisändringar. Bolagspris vinner över generellt pris; skickade offerter behåller tidigare snapshot. Saknas båda nekas utskick. Inga verkliga belopp har satts åt användaren. npm run verify: 115 tester och build passerar; nytt browserfall verifierar uppdaterat offentligt pris utan omladdning.

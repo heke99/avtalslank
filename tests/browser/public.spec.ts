@@ -66,7 +66,7 @@ test('mobile navigation, plans and policy tables stay within viewport', async ({
     await page.goto('/');
     await page.getByRole('button', { name: 'Öppna meny', exact: true }).click();
     await expect(page.getByRole('navigation', { name: 'Huvudmeny' })).toBeVisible();
-    await page.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('link', { name: 'Abonnemang', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('link', { name: 'Priser', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Välj upplägg för dina avtal' })).toBeVisible();
     for (const path of ['/', '/abonnemang', '/integritet', '/cookies']) {
         await page.goto(path);
@@ -124,3 +124,10 @@ test('email confirmation keeps token out of request URLs and waits for explicit 
  await page.goto('/auth/confirm#token_hash='+token+'&type=email');await expect(page.getByRole('heading',{name:'Bekräfta din e-postadress'})).toBeVisible();await expect(page).toHaveURL(/\/auth\/confirm$/);expect(verification).toBeNull();expect(urls.every(u=>!u.includes(token))).toBe(true);await page.getByRole('button',{name:'Bekräfta e-postadress',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();expect(verification).toMatchObject({token_hash:token,type:'email'});
 });
 test('invalid confirmation does not call Auth or offer confirmation',async({page})=>{await page.goto('/auth/confirm#token_hash=bad&type=admin');await expect(page.getByText(/Länken saknas eller är ogiltig/)).toBeVisible();await expect(page.getByRole('button',{name:'Bekräfta e-postadress',exact:true})).toHaveCount(0);});
+
+test('public pricing refreshes the shared default document tariff automatically',async({page})=>{
+ let price={version:1,documentOre:1500,includedSigners:1,extraSignerOre:500};
+ await page.route(auth+'/rest/v1/rpc/al_public_document_price',r=>r.fulfill({json:price}));await page.route(auth+'/rest/v1/rpc/al_public_prices',r=>r.fulfill({json:[]}));
+ await page.goto('/abonnemang');await expect(page.getByRole('heading',{name:'Per signerat dokument',exact:true})).toBeVisible();await expect(page.getByText(/per PDF med 1 signerare inkluderade/)).toContainText('15,00');
+ price={...price,version:2,documentOre:2500};await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.getByText(/per PDF med 1 signerare inkluderade/)).toContainText('25,00');
+});

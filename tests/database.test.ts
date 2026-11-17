@@ -2005,5 +2005,15 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');assert.ok((await one("select public.al_admin_search_signed('Kundbolag Sök') data")).data.items.some((x:any)=>x.id===fixture));
     await db.exec('reset role');const saved=await one('select price_quote from al_private.signing_cases where envelope_id=$1',[row.id]);assert.deepEqual(saved.price_quote,row.price_quote);
   });
+
+  await t.test('global document price is public and versioned while company overrides win',async()=>{
+    await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');
+    await one('select public.al_admin_document_tariff(null,$1) data',[{version:0,documentOre:2000,includedSigners:1,extraSignerOre:500,reason:'Publish general document price'}]);
+    const pub=(await one('select public.al_public_document_price() data')).data;assert.equal(pub.documentOre,2000);assert.equal(pub.organization_id,undefined);
+    await assert.rejects(db.query('select public.al_admin_document_tariff(null,$1)',[{version:0,documentOre:3000,includedSigners:1,extraSignerOre:500,reason:'Stale general price update'}]),/VERSION_CONFLICT/);
+    await db.exec('reset role');const globalOrg=crypto.randomUUID();await db.query("insert into public.al_organizations(id,name) values($1,'Default price fixture')",[globalOrg]);await db.query("insert into public.al_memberships(organization_id,user_id,role) values($1,$2,'owner')",[globalOrg,a]);
+    for(const [org,expected] of [[globalOrg,2500],[oa,12500]] as const){const env=crypto.randomUUID(),doc=crypto.randomUUID();await db.query("insert into public.al_envelopes(id,organization_id,title,created_by) values($1,$2,'Price inheritance test',$3)",[env,org,a]);await db.query("insert into public.al_documents(id,organization_id,envelope_id,name,storage_path,sha256,byte_size) values($1,$2,$3,'test.pdf',$4,$5,5)",[doc,org,env,doc+'.pdf','a'.repeat(64)]);for(let i=1;i<=2;i++)await db.query("insert into public.al_recipients(organization_id,envelope_id,name,email,method,position) values($1,$2,'Test signer',$3,'email_approval',$4)",[org,env,'default'+i+'@example.invalid',i]);await actor(a,'service_role');assert.equal((await one('select public.al_document_quote($1,null,$2,$3) data',[a,org,env])).data.unitOre,expected);await db.exec('reset role');}
+    await actor(b);await assert.rejects(db.query('select public.al_admin_document_tariff(null,$1)',[{version:1,documentOre:10,includedSigners:1,extraSignerOre:0,reason:'Unauthorized price change'}]),/PLATFORM_ADMIN_REQUIRED/);
+  });
   await db.close();
 });
