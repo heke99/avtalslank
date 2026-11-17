@@ -281,7 +281,7 @@ test("login page and invalid signer link never fabricate signed status", async (
   ).toBeVisible();
   await expect(
     page.getByText(
-      "Kontakta avsändaren för att kontrollera länken. Ingen underskrift har registrerats här.",
+      "Försök öppna sidan igen. Kontakta avsändaren om länken fortfarande inte fungerar.",
     ),
   ).toBeVisible();
 });
