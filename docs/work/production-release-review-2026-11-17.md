@@ -6,6 +6,7 @@
 ## Execution identity
 - Repository: heke99/avtalslank, branch main.
 - Baseline: 57f56f4c39dfd3fb4aca707824f3f829bef69590.
+- Rättad runtime: 778a9eecd898adc85c4cc7c7654d5c1bc93adc3e. Vercel dpl_5terAzoqf3tmmsK4uFSJF7zQ31Ln READY för produktion.
 - Mål: https://www.avtalslank.se, Supabase ykddnagtuacflilbchwx, Railway production.
 - Baseline Edge: v16 ACTIVE, bundle cd6a7d411dbd8cc6049b27e32ef2822971519bd01ef686aeb98e03b841eb0e80.
 - Worker: deployment 44152dbb-90a2-4e08-a2b1-45881288bbac; ClamAV 15d2acb8-e289-4c28-9735-7ddf9103c28b.
@@ -18,7 +19,8 @@ CI kräver nu även npm audit --audit-level=high efter installation. Full audit 
 |---|---|---|
 | Kanoniskt npm run verify | PASS | 117 kod-/DB-tester, alla migrationer i isolerad PGlite, provenance, Edge/web typer, produktionsbygge och 10 publika prerenders |
 | Produktionsberoenden | PASS | npm audit --omit=dev: 0 kända sårbarheter i resultatet; ingen garanti om frånvaro av okända sårbarheter |
-| Tidigare full Chromiumsvit | PASS | 66 browserfall på baseline; nya URL-/detaljfall inväntar ny CI (68 browserfall totalt) |
+| Full Chromiumsvit | PASS | 68 browserfall på rättad runtime, inga skip; GitHub verify-job 134056051552 SUCCESS |
+| CI container på samma commit | VÄNTAR RUNNER | Job 134056051072 var queued vid slutkontroll; tidigare containerpass ersätter inte detta körresultat |
 | Railway | PASS | 2/2 tjänster online, inga rapporterade problem/fel senaste 24h, inga väntande ändringar |
 | Verklig worker readiness | PASS | ready=true och färsk DB-heartbeat; separata verkliga scan/PDF-kontroller styr denna heartbeat |
 | Driftkö | PASS vid observation | 0 failed/reconcile, 0 löpta running-leases, 0 finalizing, 2 färdigställda fall |
@@ -43,12 +45,12 @@ CI kräver nu även npm audit --audit-level=high efter installation. Full audit 
 | PROD-010 | P0 | Nytt utskick→mänskligt godkännande→slut-PDF/ZIP→mail | BLOCKED: tariff saknas, ny mänsklig testunderskrift och aktuell filnedladdning inte gjorda. Två tidigare färdiga fall finns: 4/4 registrerade PDF/ZIP-objekt återfinns i privat Storage och 4/4 har lagrad SHA256 i rätt format. Ett av två godkännanden har den nya evidensstrukturen med namn, personnummer, hash och servertid (äldre dokument skrivs inte om). Inga personvärden lästes ut. Lagrade metadata är inte en oberoende hashkontroll av nedladdade bytes och ersätter inte ett nytt genomgående test |
 | PROD-011 | P0 | Automatisk betalning/provider-webhooks/avstämning | BLOCKED: separat Avtalslänk betalningsanslutning saknas; inga avgifter dras |
 | PROD-012 | P0 | Backup/restore för DB och dokumentobjekt | NOT RUN: inget dokumenterat återläsningsprov eller åtkomst till backupinställningar i tillgänglig connector |
-| PROD-013 | P1 | Mobil/desktop/resiliens/knappar | Chromiumsvit med syntetiska API-svar; nytt slutresultat i CI krävs efter rättningarna |
+| PROD-013 | P1 | Mobil/desktop/resiliens/knappar | PASS: 68 Chromiumfall med syntetiska API-svar; publikt URL-/refreshfall även manuellt återverifierat i riktig Chrome mot rättad produktion |
 | PROD-014 | P1 | Riktig parallell prisändring/utskick | NOT RUN fleranslutningstest; tidigare connectorförsök bevisade inte överlappning. Transaktions-/stale-kontroller är funktionstestade |
 
 ## Failures and fixes
 - DEFECT-003: full npm-audit hittade Vite dev-server-advisories i 7.3.1. Uppgraderat till 7.3.8 med låst lockfil. Detta gäller bygg-/utvecklingsmiljön; Vercel serverar statiskt bygge, inte Vite dev-server. Full verifiering och browsersvit körs med patchen. Kvarstående esbuild-notering gäller Windows utvecklingsserver (low); den körs inte i Linuxworker eller statiska webbdriften. Ingen tvingad inkompatibel transitive-override infördes. Referenser: https://github.com/vitejs/vite/security/advisories/GHSA-v2wj-q39q-566r och https://github.com/evanw/esbuild/security/advisories/GHSA-g7r4-m6w7-qqqr
-- DEFECT-001: faktiskt Chrome visade Logga in men URL stod kvar på /signup. Reload kunde därför öppna fel formulär. Mode och kanonisk URL synkas nu, inklusive återställning /login?mode=reset; inbjudningslänkar påverkas inte. Browserregression verifierar byten och refresh.
+- DEFECT-001: faktiskt Chrome visade Logga in men URL stod kvar på /signup. Reload kunde därför öppna fel formulär. Mode och kanonisk URL synkas nu, inklusive återställning /login?mode=reset; inbjudningslänkar påverkas inte. Browserregression verifierar byten och refresh. Även riktig Chrome: signup → Tillbaka till inloggning gav /login; reload behöll Logga in.
 - DEFECT-002: EnvelopeDetail väntade fortfarande obegränsat på dokument/mottagare/händelser. Nu begränsad samlad läsning; även öppning från signeradsökning har deadline. Browserregression verifierar timeout och återgång till avtalslistan.
 - Första editor-smoke krockade med ett äldre test-ID i databasen. Ingen gammal data ändrades. Samma scenario kördes med nya isolerade ID:n och passerade; read-back visade noll nya användare efter rollback.
 - Första nya release-smoke använde ett ogiltigt syntetiskt nyckelprefix och stoppades med INVALID_KEY. Prefix rättades enligt faktisk domänregel, hela testet passerade och noll testidentiteter/betalreferenser återstod.
@@ -66,6 +68,12 @@ Senaste tidigare slutnotifieringen kontrollerades med Resend get_email: status d
 Edge live-smoke: 9/9 förväntade svar, evidens i production-http-results-2026-11-17.json. HTTP200 /health är inte worker-/signeringsreadiness. Observerad klienttid 6–10s inkluderar testmiljöns nät/proxy och ska inte tolkas som en isolerad servermätning. Supabase-loggar senaste 24h: 87 function_edge-händelser, 0 5xx, runtime p95 1640ms/max1996ms vid observation. Vercel error/fatal senaste timmen gav inga loggar; statisk frontend innebär inte att alla browserfel finns där. Chrome-console innehöll endast fel från browserextension, inga observerade appfel i de publika kontrollerna.
 
 BankID, Freja och ritad signatur är avstängda; email_approval är aktiv. IP-underlag är uttryckligen forwarded_unverified, inte oberoende verifierad identitet. E-postgodkännande verifierar inte självdeklarerat personnummer mot e-legitimation. Oberoende tidsstämpling/kryptografisk PDF-försegling ingår inte i den här verifieringen.
+
+## Ytterligare faktisk åtkomstkontroll
+Ett objekt som bekräftats finnas i den privata slutdokumentbucketen efterfrågades utan inloggning via Storage public-URL. Servern nekade med HTTP400. Inga filbytes eller länktoken hämtades till rapporten.
+
+## Final CI-evidens
+[GitHub run 44088173325](https://github.com/heke99/avtalslank/actions/runs/44088173325): verify-job 134056051552 SUCCESS, 117/117 kod-/DB-tester, 68/68 Chromiumfall, npm-audit high-gate godkänd, typkontroller och produktionsbygge godkända. Containerjobbet kvar i runnerkö vid dokumentationstid. Senaste observerade tidpunkt 2026-11-17 13:04 UTC. Samlat CI får inte beskrivas som SUCCESS innan containerjobbet också har terminalt resultat.
 
 ## Cleanup
 Hosted import/editor/release-smokes kördes i transaktioner och rollback. Separat read-back: 0 nya editor-/import-/release-användare, 0 syntetisk betalreferens. Ingen verklig kunddata ändrad av SQL-testerna. Befintlig äldre smoke-identitet lämnades orörd. Inga betalningar, inga nya mail och ingen fabrikation av användarsamtycke.
