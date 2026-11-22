@@ -1749,12 +1749,12 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await db.exec('reset role');await db.query('update public.al_memberships set active=false where organization_id=$1 and user_id=$2',[oa,b]);
     await actor(reader);await assert.rejects(db.query('select * from al_private.team_invitations'),/permission denied/);
   });
-  await t.test('MFA enrollment blocks direct organization access at AAL1 and permits AAL2',async()=>{
+  await t.test('password sessions with enrolled MFA are still scoped to their organization',async()=>{
     await db.exec('reset role');await db.query("insert into auth.mfa_factors(user_id,status) values($1,'verified')",[a]);
-    await actor(a);assert.equal((await db.query('select * from public.al_organizations where id=$1',[oa])).rows.length,0);
-    await assert.rejects(db.query("select public.al_save_draft($1,'MFA bypass')",[oa]),/ACCESS_DENIED/);
-    await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);
-    assert.equal((await db.query('select * from public.al_organizations where id=$1',[oa])).rows.length,1);
+    await actor(a);
+    assert.equal((await db.query('select id from public.al_organizations where id=$1',[oa])).rows.length,1);
+    assert.equal((await db.query('select id from public.al_organizations where id=$1',[ob])).rows.length,0);
+    await assert.rejects(db.query("select public.al_save_draft($1,'Outside organization')",[ob]),/ACCESS_DENIED/);
     await db.exec('reset role');await db.query('delete from auth.mfa_factors where user_id=$1',[a]);
   });
   await t.test('reminders preserve link, fence repeated requests and isolate status projections',async()=>{
@@ -1940,11 +1940,10 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await assert.rejects(db.query("insert into auth.users(id,email,raw_user_meta_data) values($1,'invalid-registration@example.invalid',$2)",[crypto.randomUUID(),{registration:{...payload,personalNumber:'199001010018'}}]),/INVALID_REGISTRATION/);
   });
 
-  await t.test('platform requires explicit grant and AAL2; payments gate every key and cached replay',async()=>{
+  await t.test('platform requires an explicit admin grant; payments gate every key and cached replay',async()=>{
     await actor(a);await assert.rejects(db.query("select public.al_platform('list')"),/PLATFORM_ADMIN_REQUIRED/);
     await db.exec('reset role');await db.query('insert into al_private.platform_admins(user_id) values($1)',[a]);
-    await actor(a);await assert.rejects(db.query("select public.al_platform('list')"),/MFA_REQUIRED/);
-    await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');
+    await actor(a);
     assert.ok(Array.isArray((await one("select public.al_platform('list') data")).data));
     await assert.rejects(db.query("select public.al_platform('member',$1,$2)",[oa,{userId:a,role:'reader',active:true,reason:'Test last owner protection'}]),/LAST_OWNER/);
     await assert.rejects(db.query("select public.al_platform('record_payment',$1,$2)",[oa,{model:'per_document',reference:'not-paid',paidUntil:new Date(Date.now()+86400000).toISOString(),reason:'Test unsupported billing model'}]),/INVALID_PAYMENT/);
@@ -1960,7 +1959,7 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
 
   await t.test('commercial prices preserve versions and company snapshots; paid API cannot be granted by price edits',async()=>{
     await actor(b);await assert.rejects(db.query("select public.al_platform_commercial('catalog')"),/PLATFORM_ADMIN_REQUIRED/);
-    await actor(a);await assert.rejects(db.query("select public.al_platform_commercial('catalog')"),/MFA_REQUIRED/);
+    await actor(a);assert.ok((await one("select public.al_platform_commercial('catalog') data")).data);
     const admin=async()=>{await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');};
     await admin();const call=async(action:string,payload:any={},org:string|null=null)=>(await one('select public.al_platform_commercial($1,$2,$3) data',[action,org,payload])).data;
     const terms={name:'API Test',description:'Synthetic only',model:'subscription',interval:'month',baseOre:19900,documentOre:0,includedDocuments:100,userLimit:5,bindingMonths:2,noticeMonths:1,apiIncluded:true};

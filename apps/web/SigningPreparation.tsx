@@ -1,9 +1,10 @@
-import {bounded,currentSession} from "./session";
+import { PdfFieldPage, fieldOverlay, fieldPosition, type PageGeometry } from "./PdfFieldPage";
+import {currentSession} from "./session";
 import {TemplateApply} from "./TemplateApply";
-import {moveField,copyField,validateEditorFields} from "../../packages/editor/src/index";
+import {copyField,validateEditorFields} from "../../packages/editor/src/index";
 import {requestJson} from "../../packages/http/src/index";
 import React, { useEffect, useState, useRef } from "react";
-import { apiUrl, supabase, friendlyError,displayError } from "./client";
+import { apiUrl,displayError } from "./client";
 type Doc = {
   id: string;
   name: string;
@@ -56,10 +57,15 @@ export function SigningPreparation({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [loaded, setLoaded] = useState(false),
-    [preview, setPreview] = useState<string | null>(null),
-    [previewDoc, setPreviewDoc] = useState<Doc | null>(null),
+    [previewId, setPreviewId] = useState(""),
+    [geometry, setGeometry] = useState<PageGeometry>(),
     [page, setPage] = useState(0),[selected,setSelected]=useState(""),[saved,setSaved]=useState("[]"),[notice,setNotice]=useState("");
-  const alive=useRef(true);useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
+  const readyDocuments = documents.filter(doc => doc.status === "ready" && doc.page_count);
+  const previewDoc = readyDocuments.find(doc => doc.id === previewId) ?? readyDocuments[0];
+  const pageFields = fields.filter(field => field.documentId === previewDoc?.id && field.page === page);
+  const activeField = pageFields.find(field => field.id === selected);
+  const canPlace = Boolean(activeField && geometry && !locked && !busy);
+  useEffect(() => { setGeometry(undefined); setPage(0); }, [previewDoc?.id]);
   const dirty=loaded&&JSON.stringify(fields)!==saved;
   useEffect(()=>{onDirty(dirty);},[dirty,onDirty]);
   useEffect(()=>{const leave=(ev:BeforeUnloadEvent)=>{if(dirty){ev.preventDefault();ev.returnValue="";}};window.addEventListener("beforeunload",leave);return()=>window.removeEventListener("beforeunload",leave);},[dirty]);
@@ -80,21 +86,22 @@ export function SigningPreparation({
       active = false;
     };
   }, [orgId, envelopeId]);
-  useEffect(
-    () => () => {
-      if (preview) URL.revokeObjectURL(preview);
-    },
-    [preview],
-  );
   const update = (id: string, values: Partial<Field>) =>
-    setFields(fields.map((f) => (f.id === id ? { ...f, ...values } : f)));
+    setFields(current => current.map(f => f.id === id ? { ...f, ...values } : f));
+  function addField() {
+    if (!previewDoc || !recipients.length) return;
+    const id = crypto.randomUUID();
+    setFields(current => [...current, {
+      id, documentId: previewDoc.id, recipientId: recipients[0].id,
+      label: "Nytt fält", type: "text", required: true, page,
+      x: 0.1, y: 0.1, width: 0.4, height: 0.05,
+    }]);
+    setSelected(id);
+    setNotice("Klicka på PDF-sidan där fältet ska placeras.");
+  }
   return (
     <section className="field-preparation">
       <h2>Fält i dokumenten</h2>
-      <p className="muted">
-        Placeringen anges i procent från sidans övre vänstra hörn. Du kan klicka
-        på positionsytan eller ange exakta värden.
-      </p>
       {error && (
         <div className="alert" role="alert">
           {error}
@@ -103,106 +110,61 @@ export function SigningPreparation({
       {!locked&&<TemplateApply orgId={orgId} documents={documents} recipients={recipients} fields={fields} disabled={busy||!loaded} onApply={(v,name,version)=>{setFields(v);setSelected(v.at(-1)?.id??'');setNotice('Fält från '+name+' (version '+version+') har lagts in. Spara dokumentfälten för att behålla dem.');}}/>}
       {notice&&<p role="status">{notice}</p>}
       {dirty&&<p className="muted">Dokumentfälten har osparade ändringar.</p>}
-      <label>
-        Dokument att förhandsvisa
-        <select
-          value={previewDoc?.id ?? ""}
-          disabled={busy}
-          onChange={async (e) => {
-            const doc = documents.find((d) => d.id === e.target.value);
-            if (!doc) return;
-            setBusy(true);
-            try {
-              const { data, error } = await bounded(supabase.storage
-                .from("al-documents")
-                .download(doc.storage_path));
-              if (error) throw error;
-              if(!alive.current)return;setError("");setPreview(URL.createObjectURL(data));
-              setPreviewDoc(doc);
-              setPage(0);
-            } catch {
-              setError("Dokumentet kunde inte öppnas.");
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <option value="">Välj kontrollerad PDF</option>
-          {documents
-            .filter((d) => d.status === "ready" && d.page_count)
-            .map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-        </select>
-      </label>
-      {preview && previewDoc && (
-        <>
-          <label>
-            Sida
-            <select
-              value={page}
-              onChange={(e) => setPage(Number(e.target.value))}
-            >
-              {Array.from({ length: previewDoc.page_count ?? 0 }, (_, i) => (
-                <option key={i} value={i}>
-                  Sida {i + 1}
-                </option>
-              ))}
+      {readyDocuments.length === 0 && <p>Ladda upp en PDF i dokumentsteget. Fält kan läggas till när kontrollen är klar.</p>}
+      {!locked && recipients.length === 0 && <p>Lägg till minst en mottagare för att skapa ett fält.</p>}
+      {previewDoc && <>
+        <div className="field-preview-controls">
+          <label>Dokument att förhandsvisa
+            <select value={previewDoc.id} disabled={busy} onChange={e => { if (e.target.value !== previewDoc.id) { setGeometry(undefined); setPage(0); setPreviewId(e.target.value); } }}>
+              {readyDocuments.map(doc => <option key={doc.id} value={doc.id}>{doc.name}</option>)}
             </select>
           </label>
-          <label>Fält att placera<select aria-label="Fält att placera" value={selected} disabled={locked||busy} onChange={e=>setSelected(e.target.value)}><option value="">Välj ett fält</option>{fields.filter(f=>f.documentId===previewDoc.id&&f.page===page).map(f=><option key={f.id} value={f.id}>{f.label} · {recipients.find(r=>r.id===f.recipientId)?.name}</option>)}</select></label>
-          <div tabIndex={locked?-1:0} role="group" aria-label="Positionsyta för valt fält" onKeyDown={event=>{if(locked||busy)return;const delta=event.shiftKey?0.05:0.01;const directions:Record<string,[number,number]>={ArrowLeft:[-delta,0],ArrowRight:[delta,0],ArrowUp:[0,-delta],ArrowDown:[0,delta]};const direction=directions[event.key],f=fields.find(f=>f.id===selected&&f.documentId===previewDoc.id&&f.page===page);if(direction&&f){event.preventDefault();update(f.id,moveField(f,...direction));}}}
-            className="field-canvas"
-            onClick={(e) => {
-              if (locked||busy) return;
-              const f = fields.find(
-                (f) => f.id===selected&&f.documentId === previewDoc.id && f.page === page,
-              );
-              if (!f) return;
-              const r = e.currentTarget.getBoundingClientRect();
-              update(f.id, {
-                x: Math.min(
-                  1 - f.width,
-                  Math.max(0, (e.clientX - r.left) / r.width),
-                ),
-                y: Math.min(
-                  1 - f.height,
-                  Math.max(0, (e.clientY - r.top) / r.height),
-                ),
-              });
-            }}
-          >
-            <iframe
-              title="PDF med fältplacering"
-              key={preview + page}
-              src={preview + "#page=" + (page + 1)}
-              tabIndex={-1}
-            />
-            {fields
-              .filter((f) => f.documentId === previewDoc.id && f.page === page)
-              .map((f) => (
-                <span
-                  className={"placed-field"+(selected===f.id?" selected":"")}
-                  key={f.id}
-                  style={{
-                    left: f.x * 100 + "%",
-                    top: f.y * 100 + "%",
-                    width: f.width * 100 + "%",
-                    height: f.height * 100 + "%",
-                  }}
-                >
-                  {f.label}
-                </span>
-              ))}
-          </div>
-          <p className="muted">Välj fältet som ska flyttas. Använd piltangenterna för 1 procentenhet eller Skift + pil för 5.
-            Positionsytan visar ungefärlig placering. Procentvärdena nedan styr
-            den sparade placeringen.
-          </p>
-        </>
-      )}
+          <label>PDF-sida
+            <select value={page} onChange={e => { if (Number(e.target.value) !== page) { setGeometry(undefined); setPage(Number(e.target.value)); } }}>
+              {Array.from({ length: previewDoc.page_count ?? 0 }, (_, i) => <option key={i} value={i}>Sida {i + 1}</option>)}
+            </select>
+          </label>
+        </div>
+        {!locked && <div className="field-preview-controls">
+          <button className="secondary" type="button" disabled={busy || !loaded || fields.length >= 200 || !recipients.length} onClick={addField}>
+            Lägg till dokumentfält
+          </button>
+          <label>Fält att placera
+            <select value={activeField?.id ?? ""} disabled={busy || !pageFields.length} onChange={e => setSelected(e.target.value)}>
+              <option value="">Välj ett fält</option>
+              {pageFields.map(f => <option key={f.id} value={f.id}>{f.label} · {recipients.find(r => r.id === f.recipientId)?.name}</option>)}
+            </select>
+          </label>
+        </div>}
+        <div className={canPlace ? "field-canvas can-place" : "field-canvas"}
+          tabIndex={locked ? -1 : 0} role="group" aria-label="Positionsyta för valt fält"
+          onKeyDown={event => {
+            if (!canPlace || !activeField || !geometry || event.target !== event.currentTarget) return;
+            const delta = event.shiftKey ? 0.05 : 0.01;
+            const directions: Record<string, [number, number]> = { ArrowLeft: [-delta, 0], ArrowRight: [delta, 0], ArrowUp: [0, -delta], ArrowDown: [0, delta] };
+            const direction = directions[event.key];
+            if (!direction) return;
+            event.preventDefault();
+            const overlay = fieldOverlay(activeField, geometry);
+            update(activeField.id, fieldPosition(activeField, geometry, parseFloat(overlay.left) / 100 + direction[0], parseFloat(overlay.top) / 100 + direction[1]));
+          }}
+          onClick={event => {
+            if (!canPlace || !activeField || !geometry || !(event.target instanceof HTMLCanvasElement)) return;
+            const rect = event.target.getBoundingClientRect();
+            update(activeField.id, fieldPosition(activeField, geometry, (event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height));
+          }}
+        >
+          <PdfFieldPage key={previewDoc.id} path={previewDoc.storage_path} page={page} onRendered={setGeometry} />
+          {geometry && pageFields.map(f => (
+            <button key={f.id} type="button" disabled={locked || busy} aria-pressed={selected === f.id}
+              className={"placed-field" + (selected === f.id ? " selected" : "")}
+              style={fieldOverlay(f, geometry)} onClick={event => { event.stopPropagation(); setSelected(f.id); }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {!locked && <p className="muted">Välj ett fält och klicka där det ska ligga på PDF-sidan. Du kan även flytta fältet med piltangenterna.</p>}
+      </>}
       <fieldset disabled={locked || busy || !loaded} className="signer-fields">
         {fields.map((f) => (
           <div className="operation-form" key={f.id}>
@@ -239,7 +201,7 @@ export function SigningPreparation({
                   }
                 >
                   {documents
-                    .filter((d) => d.page_count)
+                    .filter((d) => d.status === "ready" && d.page_count)
                     .map((d) => (
                       <option key={d.id} value={d.id}>
                         {d.name}
@@ -315,36 +277,6 @@ export function SigningPreparation({
           </div>
         ))}
         <div className="operation-tools">
-          <button
-            className="secondary"
-            disabled={
-              fields.length >= 200 ||
-              !documents.some((d) => d.page_count) ||
-              !recipients.length
-            }
-            onClick={() => {
-              const doc = previewDoc ?? documents.find((d) => d.page_count);
-              if (!doc){setPreview(null);setPreviewDoc(null);return;}
-              setFields([
-                ...fields,
-                {
-                  id: crypto.randomUUID(),
-                  documentId: doc.id,
-                  recipientId: recipients[0].id,
-                  label: "Nytt fält",
-                  type: "text",
-                  required: true,
-                  page: previewDoc ? page : 0,
-                  x: 0.1,
-                  y: 0.1,
-                  width: 0.4,
-                  height: 0.05,
-                },
-              ]);
-            }}
-          >
-            Lägg till dokumentfält
-          </button>
           <button
             className="primary"
             onClick={async () => {

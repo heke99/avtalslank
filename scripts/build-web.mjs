@@ -28,6 +28,15 @@ if (preview) {
   await cp("public", directory, { recursive: true });
   await copyFile("docs/openapi.json", directory + "/openapi.json");
 
+  const pdfPackage = "node_modules/pdfjs-dist";
+  const pdfVersion = JSON.parse(await readFile(pdfPackage + "/package.json", "utf8")).version;
+  const pdfAssets = directory + "/assets/pdfjs-" + pdfVersion;
+  await mkdir(pdfAssets, { recursive: true });
+  await Promise.all([
+    copyFile(pdfPackage + "/build/pdf.worker.min.mjs", pdfAssets + "/pdf.worker.min.mjs"),
+    ...["cmaps", "standard_fonts", "wasm", "iccs"].map(name => cp(pdfPackage + "/" + name, pdfAssets + "/" + name, { recursive: true })),
+  ]);
+
   const env = {};
   for (const path of [".env", ".env.local", ".env." + mode, ".env." + mode + ".local"]) {
     try {

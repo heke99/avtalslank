@@ -206,7 +206,7 @@ test("desktop workspace: draft, Freja selection, readiness block, fields, billin
   await workspace(page);
   await page.getByRole("button", { name: "Nytt avtal", exact: true }).click();
   await page.getByLabel("Avtalets namn").fill("Samarbetsavtal");
-  await page.getByRole("button", { name: "Skapa utkast" }).click();
+  await page.getByRole("button", { name: "Skapa avtal" }).click();
   await expect(
     page.getByRole("heading", { name: "Samarbetsavtal" }),
   ).toBeVisible();
@@ -269,6 +269,25 @@ test("responsive workspace has no horizontal page overflow and menu works", asyn
     fullPage: true,
   });
 });
+test("login actions work at mobile width", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 760 });
+  await page.goto("/login");
+  const password = page.getByLabel("Lösenord", { exact: true });
+  await password.fill("synthetic-password");
+  await page.getByRole("button", { name: "Visa lösenord" }).click();
+  await expect(password).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Dölj lösenord" }).click();
+  await expect(password).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Glömt lösenordet?" }).click();
+  await expect(page).toHaveURL(/\/login\?mode=reset$/);
+  await expect(page.getByRole("heading", { name: "Återställ lösenord" })).toBeVisible();
+  await page.getByRole("button", { name: "Tillbaka till inloggning" }).click();
+  await page.getByRole("button", { name: "Skapa konto" }).click();
+  await expect(page).toHaveURL(/\/signup$/);
+  await expect(page.getByRole("heading", { name: "Skapa konto" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
+});
+
 test("login page and invalid signer link never fabricate signed status", async ({
   page,
 }) => {
@@ -329,7 +348,7 @@ test("recipient editing, ordering, removal and draft copying refresh the editor"
   await workspace(page);
   await page.getByRole("button", { name: "Nytt avtal", exact: true }).click();
   await page.getByLabel("Avtalets namn").fill("Originalavtal");
-  await page.getByRole("button", { name: "Skapa utkast" }).click();
+  await page.getByRole("button", { name: "Skapa avtal" }).click();
   await page.getByRole("button", { name: "Till mottagare" }).click();
   for (const [name, email] of [
     ["Person Ett", "one@example.invalid"],
@@ -595,7 +614,7 @@ test("sender can recall a sent envelope through the connected API", async ({
   );
   await page.getByRole("button", { name: "Nytt avtal", exact: true }).click();
   await page.getByLabel("Avtalets namn").fill("Återkallat testavtal");
-  await page.getByRole("button", { name: "Skapa utkast" }).click();
+  await page.getByRole("button", { name: "Skapa avtal" }).click();
   await page.getByRole("button", { name: "Till mottagare" }).click();
   await page.getByLabel("Namn", { exact: true }).fill("Testperson");
   await page
@@ -649,17 +668,8 @@ test('account reauthentication, password confirmation and global signout use Aut
  await page.getByLabel('Bekräfta nytt lösenord').fill('strong-test-password');await page.getByRole('button',{name:'Spara nytt lösenord'}).click();await expect(page.getByRole('status')).toContainText('Lösenordet är ändrat');expect(changed).toBe(true);
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Logga ut från alla enheter'}).click();await expect(page.getByRole('heading',{name:'Logga in',exact:true})).toBeVisible();expect(global).toBe(true);expect(await page.evaluate(ref=>localStorage.getItem(`sb-${ref}-auth-token`),ref)).toBeNull();
 });
-test('MFA enrollment sends challenge and code to Supabase, not application database',async({page})=>{
- await workspace(page);let verified=false;
- const user={id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors:[{id:'factor-test',factor_type:'totp',status:'verified',friendly_name:'Avtalslänk'}]};
- await page.route('**/auth/v1/factors',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'factor-test',type:'totp',totp:{secret:'SYNTHETIC-SECRET',qr_code:'<svg xmlns="http://www.w3.org/2000/svg"/>'}})}));
- await page.route('**/auth/v1/factors/factor-test/challenge',route=>route.fulfill({status:200,contentType:'application/json',body:'{"id":"challenge-test"}'}));
- await page.route('**/auth/v1/factors/factor-test/verify',route=>{expect(route.request().postDataJSON()).toMatchObject({code:'123456',challenge_id:'challenge-test'});verified=true;const jwt=[Buffer.from('{}').toString('base64url'),Buffer.from(JSON.stringify({sub:user.id,aal:'aal2',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url'),'synthetic'].join('.');return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:jwt,refresh_token:'test-refresh',expires_in:3600,token_type:'bearer',user})});});
- await page.route('**/auth/v1/user',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(verified?user:{...user,factors:[]})}));
- await page.getByRole('button',{name:'Inställningar',exact:true}).click();await page.getByRole('button',{name:'Ställ in autentiseringsapp'}).click();await expect(page.getByLabel('Manuell inställningsnyckel')).toHaveValue('SYNTHETIC-SECRET');await page.getByLabel('Kod från autentiseringsappen').fill('123456');await page.getByRole('button',{name:'Verifiera kod'}).click();await expect(page.getByText('Autentiseringsapp är aktiverad.',{exact:false})).toBeVisible();expect(verified).toBe(true);
-});
 test('status filtering and operational health do not claim signing readiness',async({page})=>{
- await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Filteravtal');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByRole('button',{name:'Avtal',exact:true}).click();
+ await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Filteravtal');await page.getByRole('button',{name:'Skapa avtal'}).click();await page.getByRole('button',{name:'Avtal',exact:true}).click();
  await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toBeVisible();await page.getByLabel('Filtrera avtal efter status',{exact:true}).selectOption('completed');await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toHaveCount(0);await page.getByLabel('Filtrera avtal efter status',{exact:true}).selectOption('draft');await expect(page.getByRole('button',{name:'Öppna Filteravtal',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByText('Dokumenthantering: Kontakta support')).toBeVisible();await expect(page.getByText('Signeringsutskick: Kontakta support')).toBeVisible();
 });
@@ -675,19 +685,14 @@ test('workspace onboarding derives real counts, filters and exports only visible
  const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Exportera visade avtal (CSV)',exact:true}).click();const download=await pending;const path=await download.path();const {readFile}=await import('node:fs/promises');const csv=await readFile(path!,'utf8');expect(csv).toContain('Zebra');expect(csv).not.toContain('Alfa');expect(csv).not.toContain('Hemligt');
  await page.getByLabel('Uppdaterad till').fill('2026-11-14');await expect(page.getByRole('alert')).toContainText('Fråndatum');await expect(page.getByRole('button',{name:'Exportera visade avtal (CSV)',exact:true})).toBeDisabled();await page.getByRole('button',{name:'Rensa filter'}).click();await expect(page.getByRole('button',{name:'Öppna Alfa',exact:true})).toBeVisible();await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'.verification/mobile-agreements.png',fullPage:true});
 });
-test('unfinished MFA setup can be restarted without deleting other factors',async({page})=>{
- await workspace(page);let factors=[{id:'unfinished-own',status:'unverified',factor_type:'totp',friendly_name:'Avtalslänk'},{id:'unfinished-other',status:'unverified',factor_type:'totp',friendly_name:'Other app'}];const removed:string[]=[];
- await page.route('**/auth/v1/user',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors})}));await page.route('**/auth/v1/factors/*',route=>{expect(route.request().method()).toBe('DELETE');const id=route.request().url().split('/').at(-1)!;removed.push(id);factors=factors.filter(f=>f.id!==id);return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id})});});
- await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toHaveCount(0);page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Börja om inställningen'}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toBeVisible();expect(removed).toEqual(['unfinished-own']);expect(factors.map(f=>f.id)).toEqual(['unfinished-other']);
-});
 test('unsaved draft changes block navigation until confirmed and Ctrl+S saves through the existing command',async({page})=>{
- await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Skyddat utkast');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByRole('button',{name:/Uppgifter/}).click();await page.getByLabel('Avtalets namn').fill('  Ändrat utkast  ');await expect(page.getByRole('status')).toContainText('Osparade ändringar');page.once('dialog',d=>d.dismiss());await page.getByRole('button',{name:'Avtal',exact:true}).click();await expect(page.getByRole('heading',{name:'Skyddat utkast',exact:true})).toBeVisible();await page.keyboard.press('Control+s');await expect(page.getByRole('heading',{name:'Ändrat utkast',exact:true})).toBeVisible();await expect(page.getByRole('status')).toContainText('Ändringarna är sparade');await page.getByRole('button',{name:'Avtal',exact:true}).click();await expect(page.getByRole('button',{name:'Öppna Ändrat utkast',exact:true})).toBeVisible();
+ await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Skyddat utkast');await page.getByRole('button',{name:'Skapa avtal'}).click();await page.getByRole('button',{name:/Uppgifter/}).click();await page.getByLabel('Avtalets namn').fill('  Ändrat utkast  ');await expect(page.getByRole('status')).toContainText('Osparade ändringar');page.once('dialog',d=>d.dismiss());await page.getByRole('button',{name:'Avtal',exact:true}).click();await expect(page.getByRole('heading',{name:'Skyddat utkast',exact:true})).toBeVisible();await page.keyboard.press('Control+s');await expect(page.getByRole('heading',{name:'Ändrat utkast',exact:true})).toBeVisible();await expect(page.getByRole('status')).toContainText('Ändringarna är sparade');await page.getByRole('button',{name:'Avtal',exact:true}).click();await expect(page.getByRole('button',{name:'Öppna Ändrat utkast',exact:true})).toBeVisible();
 });
 test('activity filtering searches localized and technical event names without claiming a complete archive',async({page})=>{
  await workspace(page);await page.getByRole('button',{name:'Företag & team',exact:true}).click();await page.getByRole('tab',{name:'Aktivitetslogg',exact:true}).click();await expect(page.getByText('Företag skapat',{exact:true})).toBeVisible();await page.getByLabel('Sök i visade händelser').fill('ingen match');await expect(page.getByRole('status')).toContainText('Inga visade händelser');await page.getByLabel('Sök i visade händelser').fill('organization.created');await expect(page.getByText('Företag skapat',{exact:true})).toBeVisible();
 });
 test('invalid upload gives a specific PDF error and resets the upload state for retry',async({page})=>{
- await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('PDF-kontroll');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByLabel('Ladda upp PDF').setInputFiles({name:'invalid.pdf',mimeType:'application/pdf',buffer:Buffer.from('not a pdf')});await expect(page.getByRole('alert')).toContainText('giltig PDF-fil');await expect(page.getByText('Välj en PDF att ladda upp',{exact:true})).toBeVisible();await expect(page.getByLabel('Ladda upp PDF')).toBeEnabled();
+ await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('PDF-kontroll');await page.getByRole('button',{name:'Skapa avtal'}).click();await page.getByLabel('Ladda upp PDF').setInputFiles({name:'invalid.pdf',mimeType:'application/pdf',buffer:Buffer.from('not a pdf')});await expect(page.getByRole('alert')).toContainText('giltig PDF-fil');await expect(page.getByText('Välj en PDF att ladda upp',{exact:true})).toBeVisible();await expect(page.getByLabel('Ladda upp PDF')).toBeEnabled();
 });
 
 test('key creation, filtering, atomic rotation presentation and bulk revocation',async({page})=>{
@@ -727,6 +732,22 @@ async function editorWorkspace(page:Page){
  const {PDFDocument}=await import('pdf-lib');const pdf=await PDFDocument.create();pdf.addPage([600,800]);pdf.addPage([600,800]);const bytes=Buffer.from(await pdf.save());await page.route('**/storage/v1/object/authenticated/al-documents/**',r=>r.fulfill({contentType:'application/pdf',body:bytes}));
  await page.getByRole('button',{name:'Öppna Mallavtal',exact:true}).click();await page.getByRole('button',{name:/Uppgifter/}).click();return{saved:()=>saved};
 }
+test("new fields can be placed on the second page of a rendered PDF", async ({ page }) => {
+  const state = await editorWorkspace(page);
+  await page.getByLabel("PDF-sida", { exact: true }).selectOption("1");
+  const canvas = page.getByLabel("PDF-sida 2", { exact: true });
+  await expect(canvas).toBeVisible();
+  await page.getByRole("button", { name: "Lägg till dokumentfält" }).click();
+  await expect(page.getByLabel("Fält att placera")).not.toHaveValue("");
+  const box = (await canvas.boundingBox())!;
+  await canvas.click({ position: { x: box.width * 0.25, y: box.height * 0.6 } });
+  await page.getByRole("button", { name: "Spara dokumentfält", exact: true }).click();
+  await expect.poll(() => state.saved().length).toBe(1);
+  expect(state.saved()[0]).toMatchObject({ page: 1, documentId: editorDocId, recipientId: editorRecipientId });
+  expect(state.saved()[0].x).toBeCloseTo(0.25, 2);
+  expect(state.saved()[0].y).toBeCloseTo(0.6, 2);
+});
+
 test('template search and editor persist roles, required flags and page geometry',async({page})=>{
  await workspace(page,[],[],[editorTemplate,{...editorTemplate,id:'eeee5555-5555-4555-8555-555555555555',name:'Årsuppgifter',version:1}]);await page.getByRole('button',{name:'Mallar',exact:true}).click();await page.getByLabel('Sök fältmall').fill('finns inte');await expect(page.getByText('Inga fältmallar matchar sökningen.')).toBeVisible();await page.getByLabel('Sök fältmall').fill('Kunduppgifter');await expect(page.locator('.template-row')).toHaveCount(1);await page.getByLabel('Sortera fältmallar').selectOption('version');await page.locator('.template-row').click();
  const dialog=page.getByRole('dialog',{name:'Redigera fältmall'});await dialog.getByLabel('Mottagarroll för fält 1').fill('Firmatecknare');await dialog.getByLabel('Obligatoriskt fält').check();await dialog.getByLabel('Sida',{exact:true}).fill('2');await dialog.getByLabel('x för mallfält 1').fill('25');
@@ -739,10 +760,10 @@ test('template application requires role mapping, preserves changes until saved 
  await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'.verification/template-application.png',fullPage:true,animations:'disabled'});await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.locator('.sidebar').evaluate(el=>el.getBoundingClientRect().right)).toBeLessThanOrEqual(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'.verification/template-application-mobile.png',fullPage:true,animations:'disabled'});
 });
 test('selected canvas field supports keyboard placement and copies with new ID while preserving the first field',async({page})=>{
- const state=await editorWorkspace(page);await page.getByLabel('Fältmall att använda').selectOption(editorTemplate.id);await page.getByLabel('Mallens måldokument').selectOption(editorDocId);await page.getByLabel('Mottagare för Kund').selectOption(editorRecipientId);await page.getByRole('button',{name:'Lägg in mallens fält'}).click();await page.getByRole('button',{name:'Kopiera dokumentfält',exact:true}).click();await page.getByLabel('Dokument att förhandsvisa',{exact:false}).selectOption(editorDocId);const select=page.getByLabel('Fält att placera');await expect(select.locator('option')).toHaveCount(3);const second=await select.locator('option').nth(2).getAttribute('value');await select.selectOption(second!);await page.getByRole('group',{name:'Positionsyta för valt fält'}).press('ArrowRight');await page.getByRole('button',{name:'Spara dokumentfält',exact:true}).click();expect(state.saved()).toHaveLength(2);expect(state.saved()[0].x).toBe(0.1);expect(state.saved()[1].x).toBe(0.13);expect(state.saved()[0].id).not.toBe(state.saved()[1].id);
+ const state=await editorWorkspace(page);await page.getByLabel('Fältmall att använda').selectOption(editorTemplate.id);await page.getByLabel('Mallens måldokument').selectOption(editorDocId);await page.getByLabel('Mottagare för Kund').selectOption(editorRecipientId);await page.getByRole('button',{name:'Lägg in mallens fält'}).click();await page.getByRole('button',{name:'Kopiera dokumentfält',exact:true}).click();await page.getByLabel('Dokument att förhandsvisa',{exact:false}).selectOption(editorDocId);const select=page.getByLabel('Fält att placera');await expect(select.locator('option')).toHaveCount(3);const second=await select.locator('option').nth(2).getAttribute('value');await select.selectOption(second!);await expect(page.getByLabel('PDF-sida 1',{exact:true})).toBeVisible();await page.getByRole('group',{name:'Positionsyta för valt fält'}).press('ArrowRight');await page.getByRole('button',{name:'Spara dokumentfält',exact:true}).click();expect(state.saved()).toHaveLength(2);expect(state.saved()[0].x).toBe(0.1);expect(state.saved()[1].x).toBe(0.13);expect(state.saved()[0].id).not.toBe(state.saved()[1].id);
 });
 test('draft validity is editable, bounded and sent through the versioned draft command',async({page})=>{
- await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Giltighetsavtal');await page.getByRole('button',{name:'Skapa utkast'}).click();await page.getByRole('button',{name:/Uppgifter/}).click();await page.getByLabel('Giltighetstid efter utskick (dagar)').fill('91');await page.getByRole('button',{name:'Spara och granska'}).click();await expect(page.getByLabel('Giltighetstid efter utskick (dagar)')).toBeVisible();let days:number|undefined;page.on('request',r=>{if(r.url().endsWith('/al_save_draft'))days=r.postDataJSON().p_expires_days;});await page.getByLabel('Giltighetstid efter utskick (dagar)').fill('30');await page.getByRole('button',{name:'Spara och granska'}).click();await expect(page.getByText('30 dagar',{exact:true})).toBeVisible();expect(days).toBe(30);
+ await workspace(page);await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Giltighetsavtal');await page.getByRole('button',{name:'Skapa avtal'}).click();await page.getByRole('button',{name:/Uppgifter/}).click();await page.getByLabel('Giltighetstid efter utskick (dagar)').fill('91');await page.getByRole('button',{name:'Spara och granska'}).click();await expect(page.getByLabel('Giltighetstid efter utskick (dagar)')).toBeVisible();let days:number|undefined;page.on('request',r=>{if(r.url().endsWith('/al_save_draft'))days=r.postDataJSON().p_expires_days;});await page.getByLabel('Giltighetstid efter utskick (dagar)').fill('30');await page.getByRole('button',{name:'Spara och granska'}).click();await expect(page.getByText('30 dagar',{exact:true})).toBeVisible();expect(days).toBe(30);
 });
 test('CSV mapping, preview, confirmation, filtered export and import history work without emails',async({page})=>{
  await workspace(page);await page.getByRole('button',{name:'Företag & team',exact:true}).click();let posts=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/contacts/imports'))posts++;});
@@ -772,7 +793,7 @@ test('verified signup completes its private server draft once and selects the re
 
 test('platform admin lists companies, audits API suspension and denies ordinary accounts',async({page})=>{
  await workspace(page);let allowed=true;const commands:any[]=[];
- await page.route('**/rest/v1/rpc/al_platform',route=>{const p=route.request().postDataJSON();commands.push(p);if(p.p_action==='status')return route.fulfill({json:{admin:allowed,mfa:true}});if(p.p_action==='list')return route.fulfill({json:[{id:org,name:'Bolag A',kind:'company',registration_number:'5568554884',members:1}]});if(p.p_action==='detail')return route.fulfill({json:{organization:{id:org,name:'Bolag A'},members:[],agreements:[],entitlement:null,audit:[]}});return route.fulfill({json:{ok:true}});});
+ await page.route('**/rest/v1/rpc/al_platform',route=>{const p=route.request().postDataJSON();commands.push(p);if(p.p_action==='status')return route.fulfill({json:{admin:allowed,mfa:false}});if(p.p_action==='list')return route.fulfill({json:[{id:org,name:'Bolag A',kind:'company',registration_number:'5568554884',members:1}]});if(p.p_action==='detail')return route.fulfill({json:{organization:{id:org,name:'Bolag A'},members:[],agreements:[],entitlement:null,audit:[]}});return route.fulfill({json:{ok:true}});});
  await page.goto('/admin');await expect(page.getByRole('heading',{name:'Plattformsadministration'})).toBeVisible();await page.screenshot({path:'.verification/platform-admin-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(page.getByRole('link',{name:'Till arbetsytan'})).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'Öppna Bolag A'}).click();await page.screenshot({path:'.verification/platform-admin-mobile.png',fullPage:true});await page.getByLabel('Anledning till ändring').fill('Supportärende om API-spärr');await page.getByRole('button',{name:'Spärra API',exact:true}).click();await expect.poll(()=>commands.some(p=>p.p_action==='suspend_api'&&p.p_org===org&&p.p_payload.suspended===true)).toBe(true);
  allowed=false;await page.reload();await expect(page.getByText('Du saknar plattformsbehörighet.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spärra API',exact:true})).toHaveCount(0);
 });
@@ -806,7 +827,21 @@ test('registration data conflicts remain editable instead of being treated as ne
  await workspace(page);await page.route('**/functions/v1/avtalslank-api/v1/account/registration**',r=>r.request().method()==='POST'?r.fulfill({status:400,json:{error:{code:'COMPANY_ALREADY_REGISTERED'}}}):r.fulfill({json:{data:{profile:null,hasDraft:true,emailVerified:true}}}));await page.goto('/');await expect(page.getByRole('heading',{name:'Komplettera ditt konto'})).toBeVisible();await expect(page.getByLabel('Bolagsnamn',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toBeVisible();
 });
 
- test('server-required MFA opens security controls even when cached user factors are stale',async({page})=>{await workspace(page);await page.route('**/functions/v1/avtalslank-api/v1/account/registration**',r=>r.fulfill({status:403,json:{error:{code:'MFA_REQUIRED'}}}));await page.goto('/');await expect(page.getByRole('heading',{name:'Verifiera din inloggning',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Kontosäkerhet',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toHaveCount(0);});
+test("workspace opens for password sessions with a previously enrolled factor", async ({ page }) => {
+  await workspace(page);
+  await page.evaluate(ref => {
+    const key = `sb-${ref}-auth-token`;
+    const session = JSON.parse(localStorage.getItem(key)!);
+    session.user.factors = [{ id: "factor-previous", status: "verified", factor_type: "totp" }];
+    localStorage.setItem(key, JSON.stringify(session));
+  }, ref);
+  await page.goto("/login");
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("heading", { name: "Översikt" })).toBeVisible();
+  await page.getByRole("button", { name: "Inställningar", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Kontosäkerhet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tvåstegsverifiering" })).toHaveCount(0);
+});
 
  test('webhook read timeout shows recovery without creating another endpoint',async({page})=>{
  await workspace(page);await page.clock.install();let requested=false,hang=true;
@@ -834,7 +869,7 @@ test('price offer from the previous workspace disappears while the new offer loa
 test('unanswered draft mutation releases the form without automatically resubmitting',async({page})=>{
  await workspace(page);await page.clock.install();let submissions=0;
  await page.route('**/rest/v1/rpc/al_save_draft',r=>{submissions++;return new Promise<void>(()=>{});});
- await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Obesvarat utkast');await page.getByRole('button',{name:'Skapa utkast',exact:true}).click();await expect.poll(()=>submissions).toBe(1);await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Kontrollera resultatet innan du försöker igen');await expect(page.getByRole('button',{name:'Skapa utkast',exact:true})).toBeEnabled();await page.clock.fastForward(30000);expect(submissions).toBe(1);await expect(page.getByLabel('Avtalets namn')).toHaveValue('Obesvarat utkast');
+ await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();await page.getByLabel('Avtalets namn').fill('Obesvarat utkast');await page.getByRole('button',{name:'Skapa avtal',exact:true}).click();await expect.poll(()=>submissions).toBe(1);await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Kontrollera resultatet innan du försöker igen');await expect(page.getByRole('button',{name:'Skapa avtal',exact:true})).toBeEnabled();await page.clock.fastForward(30000);expect(submissions).toBe(1);await expect(page.getByLabel('Avtalets namn')).toHaveValue('Obesvarat utkast');
 });
 
 test('contact and team loading timeout releases unrelated workspace controls',async({page})=>{
@@ -869,11 +904,6 @@ test('document tariff cannot be edited before loading and can recover explicitly
  await page.goto('/admin');await expect.poll(()=>requested).toBe(true);await expect(page.getByRole('button',{name:'Spara dokumentpris',exact:true})).toBeDisabled();await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');hang=false;await page.getByRole('button',{name:'Hämta sparat dokumentpris'}).click();await expect(page.getByLabel('Dokumentpris i kronor')).toHaveValue('15');await expect(page.getByRole('button',{name:'Spara dokumentpris',exact:true})).toBeEnabled();
 });
 
-test('failed MFA factor read does not offer new enrollment and can be refreshed',async({page})=>{
- await workspace(page);let broken=true;
- await page.route('**/auth/v1/user',r=>broken?r.fulfill({status:400,json:{code:'unexpected_failure',msg:'Cannot load factors'}}):r.fulfill({json:{id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors:[]}}));
- await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByRole('button',{name:'Uppdatera säkerhetsstatus'})).toBeEnabled();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toHaveCount(0);broken=false;await page.getByRole('button',{name:'Uppdatera säkerhetsstatus'}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toBeVisible();
-});
 
 test('field template fetch timeout recovers without applying fields',async({page})=>{
  await editorWorkspace(page);await page.getByRole('button',{name:/Dokument/}).first().click();await page.clock.install();let hang=true,requested=false;

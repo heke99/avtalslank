@@ -18,6 +18,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session } from "@supabase/supabase-js";
 import {
+  Eye,
+  EyeOff,
   ArrowUpRight,
   ArrowRight,
   Plus,
@@ -139,7 +141,8 @@ function App() {
     [capabilities, setCapabilities] = useState(defaults),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
-    [modal, setModal] = useState<"create" | "org" | null>(null),
+    [modal, setModal] = useState<"org" | null>(null),
+    [creating, setCreating] = useState(false),
     [selected, setSelected] = useState<Envelope | null>(null),
     [statusFilter,setStatusFilter]=useState(""),
     [dateFrom,setDateFrom]=useState(""),[dateTo,setDateTo]=useState(""),[agreementSort,setAgreementSort]=useState<"latest"|"oldest"|"title">("latest"),
@@ -184,12 +187,16 @@ function App() {
     return true;
   }
   useEffect(() => {
-    if (session) loadOrgs().catch(notify);
-    else {
+    if (!session) {
       setOrgs([]);
       setOrgId("");
+      setCreating(false);
+      return;
     }
-  }, [session?.user.id,session?.access_token]);
+    if (["/login", "/signup"].includes(location.pathname.replace(/\/$/, ""))) {
+      history.replaceState(null, "", "/app");
+    }
+  }, [session?.user.id]);
   const reloadVersion=useRef(0);
   async function reload() {
     const requestedVersion=++reloadVersion.current;
@@ -221,6 +228,7 @@ function App() {
   }
   useEffect(() => {
     setSelected(null);
+    setCreating(false);
     setEnvelopes([]);setTemplates([]);
     if (orgId) reload().catch(notify);
   }, [orgId]);
@@ -257,12 +265,13 @@ function App() {
   if (publicPath === "/s" || publicPath.startsWith("/s/")) return <Signer />;
   if (publicPath === "/reset-password")
     return <PasswordReset session={session} onError={notify} notice={notice} />;
-  if(session?.user.factors?.some(f=>f.status==="verified") && (()=>{try{return JSON.parse(atob(session.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).aal!=="aal2";}catch{return true;}})()) return <main className="security-gate"><header><Brand/><h1>Verifiera din inloggning</h1><p>Ange en kod från din autentiseringsapp för att fortsätta.</p></header><AccountSecurity/></main>;
   if (location.pathname.startsWith("/join")) return <JoinInvitation session={session}><Auth onError={notify} notice={notice}/></JoinInvitation>;
   if (!session) return <Auth onError={notify} notice={notice} />;
   if(publicPath==="/admin")return <PlatformAdmin/>;
   return (
-    <RegistrationGate session={session} organizations={orgs} onComplete={async id=>{if(await loadOrgs())setOrgId(id);}}><div className="shell">
+    <RegistrationGate key={session.user.id} session={session} organizations={orgs}
+      loadOrganizations={loadOrgs}
+      onComplete={async id=>{if(await loadOrgs())setOrgId(id);}}><div className="shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
         <Brand /><PlatformAdminLink/>
         <button className="organization" onClick={() => setModal("org")}>
@@ -294,7 +303,7 @@ function App() {
               className={view === id ? "active" : ""}
               onClick={() => {
                 if(draftDirty&&!confirm('Du har osparade ändringar. Vill du lämna utkastet?'))return;
-                setDraftDirty(false);setView(id);
+                setDraftDirty(false);setView(id);setCreating(false);
                 setSelected(null);
                 setMobileMenu(false);
               }}
@@ -373,6 +382,42 @@ function App() {
                 Skapa företagskonto
               </button>
             </div>
+          ) : creating ? (
+            <>
+              <button type="button" className="back-button" disabled={busy} onClick={() => setCreating(false)}>
+                <ChevronLeft size={16} /> Tillbaka
+              </button>
+              <div className="page-heading">
+                <div>
+                  <h1>Skapa avtal</h1>
+                  <p>Ge avtalet ett namn och fortsätt till PDF och mottagare.</p>
+                </div>
+              </div>
+              <form className="panel detail-panel agreement-create" onSubmit={event => {
+                event.preventDefault();
+                const form = new FormData(event.currentTarget);
+                const requestedScope = scope.current;
+                void action(async () => {
+                  const envelope = await rpc<Envelope>("al_save_draft", {
+                    p_org: orgId,
+                    p_title: form.get("title"),
+                  });
+                  if (scope.current !== requestedScope) return;
+                  setEnvelopes(current => [envelope, ...current.filter(item => item.id !== envelope.id)]);
+                  setView("agreements");
+                  setSelected(envelope);
+                  setCreating(false);
+                });
+              }}>
+                <label>
+                  Avtalets namn
+                  <input name="title" placeholder="Till exempel samarbetsavtal" required minLength={2} maxLength={160} autoFocus />
+                </label>
+                <button className="primary" type="submit" disabled={busy}>
+                  {busy ? "Skapar…" : "Skapa avtal"} <ArrowRight size={17} />
+                </button>
+              </form>
+            </>
           ) : selected ? (
             <EnvelopeDetail
               key={selected.id}
@@ -427,7 +472,7 @@ function App() {
                 {["overview", "agreements"].includes(view) && (
                   <button
                     className="primary"
-                    onClick={() => setModal("create")}
+                    onClick={() => {setNotice("");setCreating(true);}}
                   >
                     <Plus size={18} />
                     Nytt avtal
@@ -524,11 +569,11 @@ function App() {
                     <Empty
                       icon={<FileText size={27} />}
                       title="Inga avtal ännu"
-                      description="Skapa ett utkast och lägg till dokument och mottagare."
+                      description="Lägg till en PDF och välj vem som ska signera."
                       action={
                         <button
                           className="secondary"
-                          onClick={() => setModal("create")}
+                          onClick={() => {setNotice("");setCreating(true);}}
                         >
                           <Plus size={16} />
                           Skapa ditt första avtal
@@ -634,54 +679,6 @@ function App() {
           )}
         </div>
       </main>
-      {modal === "create" && (
-        <Modal title="Börja med ett nytt avtal" close={() => setModal(null)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const f = new FormData(e.currentTarget);
-              action(async () => {
-                const v = await rpc<Envelope>("al_save_draft", {
-                  p_org: orgId,
-                  p_title: f.get("title"),
-                  p_message: f.get("message"),
-                });
-                await reload();
-                setSelected(v);
-                setModal(null);
-              });
-            }}
-          >
-            <label>
-              Avtalets namn
-              <input
-                name="title"
-                placeholder="Till exempel samarbetsavtal"
-                required
-                minLength={2}
-                maxLength={160}
-                autoFocus
-              />
-            </label>
-            <label>
-              Meddelande till mottagaren
-              <textarea
-                name="message"
-                maxLength={2000}
-                placeholder="Valfritt meddelande"
-              />
-            </label>
-            <p className="muted">
-              Du lägger till dokument, mottagare och signeringsmetod i nästa
-              steg.
-            </p>
-            <button className="primary full" disabled={busy}>
-              {busy ? "Skapar…" : "Skapa utkast"}
-              <ArrowRight size={17} />
-            </button>
-          </form>
-        </Modal>
-      )}
       {modal === "org" && (
         <Modal title="Skapa ett företagskonto" close={() => setModal(null)}>
           <form
@@ -912,21 +909,26 @@ function Auth({
   onError: (e: unknown) => void;
 }) {
   const [mode, setMode] = useState<"login" | "register" | "reset">(location.pathname.replace(/\/$/,"")==="/signup"?"register":new URLSearchParams(location.search).get("mode")==="reset"?"reset":"login"),
+    [showPassword, setShowPassword] = useState(false),
     [busy, setBusy] = useState(false),
     [success, setSuccess] = useState(""),
     [confirmationEmail,setConfirmationEmail]=useState(""),
     [accountKind,setAccountKind]=useState<AccountKind>('company'),
     [plan,setPlan]=useState(selectedPlan(new URLSearchParams(location.search).get("plan"))??"");
   useEffect(()=>{if(!["/login","/signup"].includes(location.pathname.replace(/\/$/,"")))return;const url=new URL(location.href);url.pathname=mode==="register"?"/signup":"/login";if(mode==="reset")url.searchParams.set("mode","reset");else url.searchParams.delete("mode");history.replaceState(null,"",url);},[mode]);
+  function changeMode(next: typeof mode) {
+    setShowPassword(false);
+    setSuccess("");
+    setMode(next);
+  }
   const confirmationHeading=useRef<HTMLHeadingElement>(null);
   useEffect(()=>{if(confirmationEmail){window.scrollTo({top:0,behavior:'instant'});confirmationHeading.current?.focus();}},[confirmationEmail]);
   if(confirmationEmail)return <main className="auth-layout"><section className="auth-main"><Brand/><div className="auth-form"><h1 ref={confirmationHeading} tabIndex={-1}>Bekräftelsemejl skickat</h1><p role="status">Vi har skickat ett bekräftelsemejl till <strong>{confirmationEmail}</strong>. Öppna mejlet och klicka på länken för att bekräfta ditt konto.</p><p>Kontrollera även skräpposten om mejlet inte finns i inkorgen. Det kan ta några minuter innan det kommer fram.</p><a className="primary full" href="/login">Till inloggningen</a><button className="text-button" onClick={()=>{setConfirmationEmail('');setSuccess('');}}>Ändra e-postadress</button><p>Behöver du hjälp? <a href="/hjalp">Kontakta oss</a>.</p></div></section></main>;
   return (
-    <div className="auth-layout">
+    <main className="auth-layout">
       <div className="auth-main">
         <Brand />
         <div className="auth-form">
-          <span className="eyebrow">AVTALSLÄNK</span>
           <h1>
             {mode === "login"
               ? "Logga in"
@@ -1010,31 +1012,42 @@ function Auth({
               </div>
             </label>
             {mode !== "reset" && (
-              <label>
-                Lösenord
-                <div className="input-icon">
-                  <LockKeyhole size={17} />
-                  <input
-                    name="password"
-                    type="password"
-                    required
-                    minLength={mode === "register" ? 12 : 1}
-                    autoComplete={
-                      mode === "register" ? "new-password" : "current-password"
-                    }
-                    placeholder={
-                      mode === "register" ? "Minst 12 tecken" : "Ditt lösenord"
-                    }
-                  />
-                </div>
-              </label>
+              <div className="auth-password">
+                <label>
+                  Lösenord
+                  <div className="input-icon">
+                    <LockKeyhole size={17} aria-hidden="true" />
+                    <input
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      minLength={mode === "register" ? 12 : 1}
+                      autoComplete={mode === "register" ? "new-password" : "current-password"}
+                      placeholder={mode === "register" ? "Minst 12 tecken" : "Ditt lösenord"}
+                    />
+                  </div>
+                </label>
+                <button
+                  className="auth-password-toggle"
+                  type="button"
+                  aria-label={showPassword ? "Dölj lösenord" : "Visa lösenord"}
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                </button>
+              </div>
+            )}
+            {mode === "login" && (
+              <button className="auth-reset" type="button" disabled={busy} onClick={() => changeMode("reset")}>
+                Glömt lösenordet?
+              </button>
             )}
             {mode==="register"&&<>
               {accountKind === "company" && <><label>Önskat upplägg<select value={plan} onChange={e=>setPlan(e.target.value)} aria-label="Önskat upplägg"><option value="">Jag väljer senare</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
               <p className="auth-plan">Planvalet är ett önskemål. Inget betalt abonnemang, ingen bindningstid och ingen debitering startar vid registrering.</p></>}
               <div className="auth-legal"><label><input name="terms" type="checkbox" required/><span>{accountKind === "company" ? "Jag företräder företaget och accepterar" : "Jag accepterar"} <a href={"/villkor?version="+legalVersion} target="_blank" rel="noopener">allmänna villkor för kontot</a> (version {legalVersion}).</span></label><p>Så använder vi dina uppgifter: <a href="/integritet" target="_blank" rel="noopener">integritetspolicy</a>. Detta är information, inte ett samtycke till marknadsföring.</p></div>
             </>}
-            <button className="primary full" disabled={busy || !configured}>
+            <button className="primary full auth-submit" type="submit" disabled={busy || !configured}>
               {busy
                 ? "Ett ögonblick…"
                 : mode === "login"
@@ -1045,48 +1058,31 @@ function Auth({
               <ArrowRight size={17} />
             </button>
           </form>
-          <div className="auth-public-links"><a href="/">Till startsidan</a><a href="/abonnemang">Abonnemang</a><a href="/integritet">Integritet</a><a href="/cookies">Cookies</a><a href="/villkor">Villkor</a></div>
-          <div className="auth-links">
+          <div className="auth-actions">
             {mode === "login" ? (
-              <>
-                <button
-                  onClick={() => {
-                    setMode("reset");
-                    setSuccess("");
-                  }}
-                >
-                  Glömt lösenordet?
-                </button>
-                <span>
-                  Ny här?{" "}
-                  <button
-                    onClick={() => {
-                      setMode("register");
-                      setSuccess("");
-                    }}
-                  >
-                    Skapa konto
-                  </button>
-                </span>
-              </>
+              <button className="secondary full" type="button" disabled={busy} onClick={() => changeMode("register")}>
+                Skapa konto
+              </button>
             ) : (
-              <button
-                onClick={() => {
-                  setMode("login");
-                  setSuccess("");
-                }}
-              >
+              <button className="secondary full" type="button" disabled={busy} onClick={() => changeMode("login")}>
                 Tillbaka till inloggning
               </button>
             )}
           </div>
         </div>
         <footer>
-          Trafexa Nordic AB · 556855-4884{" "}
-          <a href="mailto:info@trafexa.com">Kontakta oss</a>
+          <nav className="auth-public-links" aria-label="Avtalslänk">
+            <a href="/">Startsida</a>
+            <a href="/abonnemang">Abonnemang</a>
+            <a href="/integritet">Integritet</a>
+            <a href="/cookies">Cookies</a>
+            <a href="/villkor">Villkor</a>
+            <a href="/hjalp">Hjälp</a>
+          </nav>
+          <small>Trafexa Nordic AB · 556855-4884</small>
         </footer>
       </div>
-    </div>
+    </main>
   );
 }
 function EnvelopeDetail({
