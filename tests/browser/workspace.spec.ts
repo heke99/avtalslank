@@ -918,6 +918,9 @@ test('a late signing price from an older generation is discarded',async({page})=
   await wait;return r.fulfill({json:{data:{documents:1,signers:1,unitOre:1000,totalOre:1000,hash:'a'.repeat(64)}}});
  });
  await page.route('**/v1/envelopes/'+editorEnvelopeId+'/party*',r=>r.fulfill({json:{data:{ok:true}}}));
+ await page.route('**/rest/v1/rpc/al_capabilities',r=>r.fulfill({json:[{method:'email_approval',enabled:true}]}));
+ await page.reload();
+ await page.getByRole('button',{name:'Öppna Mallavtal',exact:true}).click();
  await page.getByRole('button',{name:/Granska & skicka/}).click();
  await expect.poll(()=>calls).toBe(1);
  await page.getByText('Företagsuppgifter för Mottagaren',{exact:true}).click();
