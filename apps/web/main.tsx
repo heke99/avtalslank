@@ -265,7 +265,6 @@ function App() {
   if (publicPath === "/s" || publicPath.startsWith("/s/")) return <Signer />;
   if (publicPath === "/reset-password")
     return <PasswordReset session={session} onError={notify} notice={notice} />;
-  if(session?.user.factors?.some(f=>f.status==="verified") && (()=>{try{return JSON.parse(atob(session.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).aal!=="aal2";}catch{return true;}})()) return <main className="security-gate"><header><Brand/><h1>Verifiera din inloggning</h1><p>Ange en kod från din autentiseringsapp för att fortsätta.</p></header><AccountSecurity/></main>;
   if (location.pathname.startsWith("/join")) return <JoinInvitation session={session}><Auth onError={notify} notice={notice}/></JoinInvitation>;
   if (!session) return <Auth onError={notify} notice={notice} />;
   if(publicPath==="/admin")return <PlatformAdmin/>;
