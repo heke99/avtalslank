@@ -145,7 +145,10 @@ Deno.serve(async (req: Request) => {
       if (error || !data.user)
         return response({ error: { code: "AUTH_REQUIRED", requestId } }, 401);
       verifiedActor = data.user.id;
-
+      if(data.user.factors?.some(f=>f.status==='verified')){
+        const claims=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        if(claims.aal!=='aal2')throw Error('MFA_REQUIRED');
+      }
     }
     if(isApi){const gate=await service.rpc('al_api_payment_guard',{p_hash:await sha256Hex(token)});if(gate.error){if(gate.error.message.includes('PAYMENT_REQUIRED'))return response({error:{code:'PAYMENT_REQUIRED',requestId}},402);throw gate.error;}}
     let body: Record<string, unknown> = {};

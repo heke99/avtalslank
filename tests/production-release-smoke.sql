@@ -29,7 +29,7 @@ do $$begin
  begin perform public.al_save_draft(current_setting('al.release_org')::uuid,'Reader forbidden');raise exception 'READER_WRITE_ALLOWED';exception when insufficient_privilege then null;end;
 end $$;
 select set_config('request.jwt.claims','{"role":"authenticated","sub":"f8200001-0000-4000-8000-000000000001","aal":"aal1"}',true);
-do $$begin if jsonb_typeof(public.al_platform('list')) is distinct from 'array' then raise exception 'ADMIN_LIST_FAILED';end if;end $$;
+do $$begin begin perform public.al_platform('list');raise exception 'ADMIN_WITHOUT_MFA';exception when others then if sqlerrm<>'MFA_REQUIRED' then raise;end if;end;end $$;
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);set local role service_role;
 do $$declare o uuid:=current_setting('al.release_org')::uuid;k jsonb;begin

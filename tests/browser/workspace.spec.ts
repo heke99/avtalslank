@@ -794,7 +794,7 @@ test('verified signup completes its private server draft once and selects the re
 
 test('platform admin lists companies, audits API suspension and denies ordinary accounts',async({page})=>{
  await workspace(page);let allowed=true;const commands:any[]=[];
- await page.route('**/rest/v1/rpc/al_platform',route=>{const p=route.request().postDataJSON();commands.push(p);if(p.p_action==='status')return route.fulfill({json:{admin:allowed,mfa:false}});if(p.p_action==='list')return route.fulfill({json:[{id:org,name:'Bolag A',kind:'company',registration_number:'5568554884',members:1}]});if(p.p_action==='detail')return route.fulfill({json:{organization:{id:org,name:'Bolag A'},members:[],agreements:[],entitlement:null,audit:[]}});return route.fulfill({json:{ok:true}});});
+ await page.route('**/rest/v1/rpc/al_platform',route=>{const p=route.request().postDataJSON();commands.push(p);if(p.p_action==='status')return route.fulfill({json:{admin:allowed,mfa:true}});if(p.p_action==='list')return route.fulfill({json:[{id:org,name:'Bolag A',kind:'company',registration_number:'5568554884',members:1}]});if(p.p_action==='detail')return route.fulfill({json:{organization:{id:org,name:'Bolag A'},members:[],agreements:[],entitlement:null,audit:[]}});return route.fulfill({json:{ok:true}});});
  await page.goto('/admin');await expect(page.getByRole('heading',{name:'Plattformsadministration'})).toBeVisible();await page.screenshot({path:'.verification/platform-admin-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(page.getByRole('link',{name:'Till arbetsytan'})).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'Öppna Bolag A'}).click();await page.screenshot({path:'.verification/platform-admin-mobile.png',fullPage:true});await page.getByLabel('Anledning till ändring').fill('Supportärende om API-spärr');await page.getByRole('button',{name:'Spärra API',exact:true}).click();await expect.poll(()=>commands.some(p=>p.p_action==='suspend_api'&&p.p_org===org&&p.p_payload.suspended===true)).toBe(true);
  allowed=false;await page.reload();await expect(page.getByText('Du saknar plattformsbehörighet.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spärra API',exact:true})).toHaveCount(0);
 });
@@ -828,21 +828,7 @@ test('registration data conflicts remain editable instead of being treated as ne
  await workspace(page);await page.route('**/functions/v1/avtalslank-api/v1/account/registration**',r=>r.request().method()==='POST'?r.fulfill({status:400,json:{error:{code:'COMPANY_ALREADY_REGISTERED'}}}):r.fulfill({json:{data:{profile:null,hasDraft:true,emailVerified:true}}}));await page.goto('/');await expect(page.getByRole('heading',{name:'Komplettera ditt konto'})).toBeVisible();await expect(page.getByLabel('Bolagsnamn',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toBeVisible();
 });
 
-test("workspace opens for password sessions with a previously enrolled factor", async ({ page }) => {
-  await workspace(page);
-  await page.evaluate(ref => {
-    const key = `sb-${ref}-auth-token`;
-    const session = JSON.parse(localStorage.getItem(key)!);
-    session.user.factors = [{ id: "factor-previous", status: "verified", factor_type: "totp" }];
-    localStorage.setItem(key, JSON.stringify(session));
-  }, ref);
-  await page.goto("/login");
-  await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole("heading", { name: "Översikt" })).toBeVisible();
-  await page.getByRole("button", { name: "Inställningar", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Kontosäkerhet" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Tvåstegsverifiering" })).toHaveCount(0);
-});
+ test('server-required MFA opens security controls even when cached user factors are stale',async({page})=>{await workspace(page);await page.route('**/functions/v1/avtalslank-api/v1/account/registration**',r=>r.fulfill({status:403,json:{error:{code:'MFA_REQUIRED'}}}));await page.goto('/');await expect(page.getByRole('heading',{name:'Verifiera din inloggning',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Kontosäkerhet',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Spara kontouppgifter'})).toHaveCount(0);});
 
  test('webhook read timeout shows recovery without creating another endpoint',async({page})=>{
  await workspace(page);await page.clock.install();let requested=false,hang=true;
@@ -920,4 +906,26 @@ test('a slow older CSV file cannot replace a later file selection',async({page})
 
 test('unanswered envelope detail read releases workspace actions with a visible timeout',async({page})=>{
  await workspace(page,[{id:editorEnvelopeId,organization_id:org,title:'Detaljkontroll',message:'',status:'draft',generation:1,sequential:false,expires_days:14,updated_at:new Date().toISOString()}]);await page.clock.install();let requested=false;await page.route('**/rest/v1/al_documents*',r=>{requested=true;return new Promise<void>(()=>{});});await page.getByRole('button',{name:'Öppna Detaljkontroll',exact:true}).click();await expect.poll(()=>requested).toBe(true);await page.clock.fastForward(13000);await expect(page.getByRole('alert')).toContainText('Begäran tog för lång tid');await page.getByRole('button',{name:'Tillbaka till avtal',exact:true}).click();await expect(page.getByRole('button',{name:'Nytt avtal',exact:true})).toBeEnabled();
+});
+
+test('MFA enrollment sends challenge and code to Supabase, not application database',async({page})=>{
+ await workspace(page);let verified=false;
+ const user={id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors:[{id:'factor-test',factor_type:'totp',status:'verified',friendly_name:'Avtalslänk'}]};
+ await page.route('**/auth/v1/factors',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'factor-test',type:'totp',totp:{secret:'SYNTHETIC-SECRET',qr_code:'<svg xmlns="http://www.w3.org/2000/svg"/>'}})}));
+ await page.route('**/auth/v1/factors/factor-test/challenge',route=>route.fulfill({status:200,contentType:'application/json',body:'{"id":"challenge-test"}'}));
+ await page.route('**/auth/v1/factors/factor-test/verify',route=>{expect(route.request().postDataJSON()).toMatchObject({code:'123456',challenge_id:'challenge-test'});verified=true;const jwt=[Buffer.from('{}').toString('base64url'),Buffer.from(JSON.stringify({sub:user.id,aal:'aal2',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url'),'synthetic'].join('.');return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:jwt,refresh_token:'test-refresh',expires_in:3600,token_type:'bearer',user})});});
+ await page.route('**/auth/v1/user',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(verified?user:{...user,factors:[]})}));
+ await page.getByRole('button',{name:'Inställningar',exact:true}).click();await page.getByRole('button',{name:'Ställ in autentiseringsapp'}).click();await expect(page.getByLabel('Manuell inställningsnyckel')).toHaveValue('SYNTHETIC-SECRET');await page.getByLabel('Kod från autentiseringsappen').fill('123456');await page.getByRole('button',{name:'Verifiera kod'}).click();await expect(page.getByText('Autentiseringsapp är aktiverad.',{exact:false})).toBeVisible();expect(verified).toBe(true);
+});
+
+test('unfinished MFA setup can be restarted without deleting other factors',async({page})=>{
+ await workspace(page);let factors=[{id:'unfinished-own',status:'unverified',factor_type:'totp',friendly_name:'Avtalslänk'},{id:'unfinished-other',status:'unverified',factor_type:'totp',friendly_name:'Other app'}];const removed:string[]=[];
+ await page.route('**/auth/v1/user',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors})}));await page.route('**/auth/v1/factors/*',route=>{expect(route.request().method()).toBe('DELETE');const id=route.request().url().split('/').at(-1)!;removed.push(id);factors=factors.filter(f=>f.id!==id);return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id})});});
+ await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toHaveCount(0);page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Börja om inställningen'}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toBeVisible();expect(removed).toEqual(['unfinished-own']);expect(factors.map(f=>f.id)).toEqual(['unfinished-other']);
+});
+
+test('failed MFA factor read does not offer new enrollment and can be refreshed',async({page})=>{
+ await workspace(page);let broken=true;
+ await page.route('**/auth/v1/user',r=>broken?r.fulfill({status:400,json:{code:'unexpected_failure',msg:'Cannot load factors'}}):r.fulfill({json:{id:'22222222-2222-4222-8222-222222222222',email:'test@example.invalid',factors:[]}}));
+ await page.getByRole('button',{name:'Inställningar',exact:true}).click();await expect(page.getByRole('button',{name:'Uppdatera säkerhetsstatus'})).toBeEnabled();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toHaveCount(0);broken=false;await page.getByRole('button',{name:'Uppdatera säkerhetsstatus'}).click();await expect(page.getByRole('button',{name:'Ställ in autentiseringsapp'})).toBeVisible();
 });
