@@ -612,6 +612,7 @@ test("sender can recall a sent envelope through the connected API", async ({
       });
     },
   );
+  await page.reload();
   await page.getByRole("button", { name: "Nytt avtal", exact: true }).click();
   await page.getByLabel("Avtalets namn").fill("Återkallat testavtal");
   await page.getByRole("button", { name: "Skapa avtal" }).click();
@@ -729,7 +730,7 @@ async function editorWorkspace(page:Page){
  await workspace(page,[envelope],[{id:editorRecipientId,name:'Mottagaren',email:'recipient@example.invalid',method:'email_approval',position:1,status:'pending'}],[editorTemplate],[doc]);
  await page.route('**/v1/envelopes/'+editorEnvelopeId+'/prepare*',r=>r.fulfill({json:{data:{envelope:{...envelope,generation,fields:saved}}}}));
  await page.route('**/v1/envelopes/'+editorEnvelopeId+'/fields*',r=>{const b=r.request().postDataJSON();expect(b.generation).toBe(generation);saved=b.fields;generation++;return r.fulfill({json:{data:{...envelope,generation,fields:saved}}});});
- const {PDFDocument}=await import('pdf-lib');const pdf=await PDFDocument.create();pdf.addPage([600,800]);pdf.addPage([600,800]);const bytes=Buffer.from(await pdf.save());await page.route('**/storage/v1/object/authenticated/al-documents/**',r=>r.fulfill({contentType:'application/pdf',body:bytes}));
+ const {PDFDocument}=await import('pdf-lib');const pdf=await PDFDocument.create();pdf.addPage([600,800]);pdf.addPage([600,800]);const bytes=Buffer.from(await pdf.save());await page.route('**/storage/v1/object/al-documents/**',r=>r.fulfill({contentType:'application/pdf',body:bytes}));
  await page.getByRole('button',{name:'Öppna Mallavtal',exact:true}).click();await page.getByRole('button',{name:/Uppgifter/}).click();return{saved:()=>saved};
 }
 test("new fields can be placed on the second page of a rendered PDF", async ({ page }) => {
@@ -886,8 +887,9 @@ test('returning to the same workspace ignores an older agreement response',async
 
 test('delivery read errors clear after recovery and never imply no deliveries',async({page})=>{
  await editorWorkspace(page);let broken=true;
+ const delivery=page.locator('section').filter({has:page.getByRole('heading',{name:'Leveranser och slutdokument',exact:true})}).filter({has:page.getByRole('button',{name:'Uppdatera leveransstatus',exact:true})}).last();
  await page.route('**/v1/envelopes/'+editorEnvelopeId+'/deliveries*',r=>broken?r.fulfill({status:400,json:{error:{code:'ACCESS_DENIED'}}}):r.fulfill({json:{data:[{id:'delivery',kind:'invitation',status:'completed'}]}}));
- await page.getByRole('button',{name:'Uppdatera leveransstatus'}).click();await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByText('Inga utskick registrerade.',{exact:true})).toHaveCount(0);broken=false;await page.getByRole('button',{name:'Uppdatera leveransstatus'}).click();await expect(page.getByText('Signeringsinbjudan',{exact:true})).toBeVisible();await expect(page.getByRole('alert')).toHaveCount(0);
+ await page.getByRole('button',{name:'Uppdatera leveransstatus'}).click();await expect(delivery.getByRole('alert')).toBeVisible();await expect(page.getByText('Inga utskick registrerade.',{exact:true})).toHaveCount(0);broken=false;await page.getByRole('button',{name:'Uppdatera leveransstatus'}).click();await expect(page.getByText('Signeringsinbjudan',{exact:true})).toBeVisible();await expect(delivery.getByRole('alert')).toHaveCount(0);
 });
 
 test('a late signing price from an older generation is discarded',async({page})=>{

@@ -120,7 +120,7 @@ export function SigningPreparation({
             </select>
           </label>
           <label>PDF-sida
-            <select value={page} onChange={e => { if (Number(e.target.value) !== page) { setGeometry(undefined); setPage(Number(e.target.value)); } }}>
+            <select aria-label="PDF-sida" value={page} onChange={e => { if (Number(e.target.value) !== page) { setGeometry(undefined); setPage(Number(e.target.value)); } }}>
               {Array.from({ length: previewDoc.page_count ?? 0 }, (_, i) => <option key={i} value={i}>Sida {i + 1}</option>)}
             </select>
           </label>
