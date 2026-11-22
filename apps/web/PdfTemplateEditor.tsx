@@ -60,7 +60,10 @@ export function PdfTemplateEditor({orgId, template, useTemplate, onSaved, onCrea
     const {finalPdf}=await import("../../packages/signing/src/index");
     const original=new Uint8Array(await pdf.arrayBuffer());
     const documentId=crypto.randomUUID(), recipientId=crypto.randomUUID();
-    const result=await finalPdf(original,await sha256Hex(original),fields.map(field=>({...field,documentId,recipientId})),values,documentId);
+    const signingFields=fields.map(({id,label,type,required,page,x,y,width,height})=>({
+      id,label,type,required,page,x,y,width,height,documentId,recipientId,
+    }));
+    const result=await finalPdf(original,await sha256Hex(original),signingFields,values,documentId);
     const safeName=name.replace(/[^\p{L}\p{N}_.-]+/gu,"_").slice(0,110);
     await onCreate(name.trim(),new File([new Uint8Array(result.bytes)],safeName+".pdf",{type:"application/pdf"}));
   }
