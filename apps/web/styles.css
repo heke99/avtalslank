@@ -1820,3 +1820,14 @@ input,select,textarea{border-radius:4px!important;color:#202a35;border-color:#cb
 .field-canvas canvas:not([hidden]) { display: block; width: 100%; height: auto; }
 .field-canvas .placed-field { pointer-events: auto; padding: 0 3px; text-align: left; white-space: nowrap; }
 .pdf-field-error { padding: 12px; }
+
+.pdf-template-form {
+  display: grid;
+  gap: 16px;
+  max-width: 760px;
+  margin-top: 20px;
+}
+.pdf-template-form label { display: grid; gap: 6px; }
+.pdf-template-form .field-canvas { margin: 0; }
+.pdf-template-form > .primary { justify-self: start; }
+.pdf-template-row { flex-wrap: wrap; }

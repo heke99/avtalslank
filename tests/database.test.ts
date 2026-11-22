@@ -2046,6 +2046,20 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     await db.query("update public.al_memberships set role='admin',active=false where organization_id=$1 and user_id=$2",[oa,b]);
 
   });
+  await t.test('PDF templates bind a private existing source and reject foreign organization access',async()=>{
+    const path=oa+'/templates/'+crypto.randomUUID()+'.pdf';
+    const fields=[{id:crypto.randomUUID(),label:'Förnamn',recipientRole:'Avsändare',type:'text',required:true,page:0,x:0.1,y:0.2,width:0.4,height:0.05}];
+    await actor(a);
+    await assert.rejects(db.query('select public.al_save_pdf_template($1,$2,$3,$4)',[oa,'Test PDF',fields,path]),/UPLOAD_NOT_FOUND/);
+    await db.query("insert into storage.objects(bucket_id,name) values('al-documents',$1)",[path]);
+    const saved=(await one('select public.al_save_pdf_template($1,$2,$3,$4) data',[oa,'Test PDF',fields,path])).data;
+    assert.equal(saved.pdf_path,path);
+    assert.equal((await one("select count(*)::int n from storage.objects where name=$1",[path])).n,1);
+    await actor(b);
+    assert.equal((await one("select count(*)::int n from storage.objects where name=$1",[path])).n,0);
+    await assert.rejects(db.query('select public.al_save_pdf_template($1,$2,$3,$4)',[ob,'Foreign template',fields,path]),/ACCESS_DENIED/);
+  });
+
   await t.test('payment replay never rolls back later access; reversal blocks the exact receipt immediately',async()=>{
     await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');
     const first={model:'subscription',reference:'integrity-payment-1',paidUntil:new Date(Date.now()+2*86400000).toISOString(),reason:'Record first verified payment'};const second={...first,reference:'integrity-payment-2',paidUntil:new Date(Date.now()+3*86400000).toISOString()};
