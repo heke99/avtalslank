@@ -2012,7 +2012,9 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     const pub=(await one('select public.al_public_document_price() data')).data;assert.equal(pub.documentOre,2000);assert.equal(pub.organization_id,undefined);
     await assert.rejects(db.query('select public.al_admin_document_tariff(null,$1)',[{version:0,documentOre:3000,includedSigners:1,extraSignerOre:500,reason:'Stale general price update'}]),/VERSION_CONFLICT/);
     await db.exec('reset role');const globalOrg=crypto.randomUUID();await db.query("insert into public.al_organizations(id,name) values($1,'Default price fixture')",[globalOrg]);await db.query("insert into public.al_memberships(organization_id,user_id,role) values($1,$2,'owner')",[globalOrg,a]);
+    await db.query('update al_private.platform_admins set active=false where user_id=$1',[a]);
     for(const [org,expected] of [[globalOrg,2500],[oa,12500]] as const){const env=crypto.randomUUID(),doc=crypto.randomUUID();await db.query("insert into public.al_envelopes(id,organization_id,title,created_by) values($1,$2,'Price inheritance test',$3)",[env,org,a]);await db.query("insert into public.al_documents(id,organization_id,envelope_id,name,storage_path,sha256,byte_size) values($1,$2,$3,'test.pdf',$4,$5,5)",[doc,org,env,doc+'.pdf','a'.repeat(64)]);for(let i=1;i<=2;i++)await db.query("insert into public.al_recipients(organization_id,envelope_id,name,email,method,position) values($1,$2,'Test signer',$3,'email_approval',$4)",[org,env,'default'+i+'@example.invalid',i]);await actor(a,'service_role');assert.equal((await one('select public.al_document_quote($1,null,$2,$3) data',[a,org,env])).data.unitOre,expected);await db.exec('reset role');}
+    await db.query('update al_private.platform_admins set active=true where user_id=$1',[a]);
     await actor(b);await assert.rejects(db.query('select public.al_admin_document_tariff(null,$1)',[{version:1,documentOre:10,includedSigners:1,extraSignerOre:0,reason:'Unauthorized price change'}]),/PLATFORM_ADMIN_REQUIRED/);
   });
 
@@ -2023,13 +2025,26 @@ test("real PostgreSQL: isolated organizations, guarded commands, private uploads
     const catalog=(await one("select public.al_platform_commercial('catalog') data")).data;const plan=catalog.find((x:any)=>x.code==='signerplan');assert.equal(plan.terms.extraSignerOre,300);
     const company=(await one("select public.al_platform_commercial('company',$1) data",[oa])).data;
     await one("select public.al_platform_commercial('assign_offer',$1,$2) data",[oa,{priceId:plan.id,revision:company.offer.revision,reference:'integrated-signer-plan',reason:'Use package price for signing'}]);
-    await db.exec('reset role');const e=await one("select id,generation from public.al_envelopes where organization_id=$1 and title='Price inheritance test' limit 1",[oa]);await service();const q=(await one('select public.al_document_quote($1,null,$2,$3) data',[a,oa,e.id])).data;assert.equal(q.unitOre,1000);
+    await db.exec('reset role');await db.query("insert into public.al_memberships(organization_id,user_id,role,active) values($1,$2,'sender',true) on conflict(organization_id,user_id) do update set role='sender',active=true",[oa,b]);const e=await one("select id,generation from public.al_envelopes where organization_id=$1 and title='Price inheritance test' limit 1",[oa]);await service();const q=(await one('select public.al_document_quote($1,null,$2,$3) data',[b,oa,e.id])).data;assert.equal(q.unitOre,1000);
     await admin();await db.query("select public.al_add_recipient($1,$2,'Extra signer','extra-signer@example.invalid','email_approval',3)",[oa,e.id]);
-    await service();const next=(await one('select public.al_document_quote($1,null,$2,$3) data',[a,oa,e.id])).data;assert.equal(next.unitOre,1300);assert.notEqual(next.hash,q.hash);
+    await service();const next=(await one('select public.al_document_quote($1,null,$2,$3) data',[b,oa,e.id])).data;assert.equal(next.unitOre,1300);assert.notEqual(next.hash,q.hash);
     const snap=await flow(e.id,'read');const payload={generation:e.generation,snapshot:snap,keyFingerprint:'f'.repeat(64),priceHash:q.hash,links:await Promise.all(snap.recipients.map(async(r:any)=>({id:crypto.randomUUID(),recipientId:r.id,tokenHash:await sha256Hex(crypto.randomUUID())})))};
     await db.exec('reset role');await db.query("update public.al_documents set status='ready',page_count=1 where envelope_id=$1",[e.id]);await service();await db.query("select public.al_signing_worker('heartbeat',null,null,$1)",[{ready:true,keyFingerprint:'f'.repeat(64)}]);payload.snapshot=await flow(e.id,'read');
-    await assert.rejects(db.query("select public.al_flow_command($1,null,$2,$3,'send',$4)",[a,oa,e.id,payload]),/PRICE_CHANGED/);
+    await assert.rejects(db.query("select public.al_flow_command($1,null,$2,$3,'send',$4)",[b,oa,e.id,payload]),/PRICE_CHANGED/);
     await db.exec('reset role');assert.equal((await one('select count(*)::int n from al_private.signing_cases where envelope_id=$1',[e.id])).n,0);
+    await admin();
+    assert.equal((await one('select public.al_admin_complimentary_signing($1,true,$2) data',[oa,'Grant free signing for test company'])).data,true);
+    await actor(b);
+    await assert.rejects(db.query('select public.al_admin_complimentary_signing($1,false,$2)',[oa,'User cannot revoke assigned access']),/PLATFORM_ADMIN_REQUIRED/);
+    await service();const free=(await one('select public.al_document_quote($1,null,$2,$3) data',[b,oa,e.id])).data;
+    assert.equal(free.complimentary,true);assert.equal(free.totalOre,0);
+    await admin();
+    assert.equal((await one('select public.al_admin_complimentary_signing($1,false,$2) data',[oa,'Revoke free signing for test company'])).data,false);
+    await service();assert.equal((await one('select public.al_document_quote($1,null,$2,$3) data',[a,oa,e.id])).data.complimentary,true);
+    assert.equal((await one('select public.al_document_quote($1,null,$2,$3) data',[b,oa,e.id])).data.totalOre,1300);
+    await db.exec('reset role');
+    await db.query("update public.al_memberships set role='admin',active=false where organization_id=$1 and user_id=$2",[oa,b]);
+
   });
   await t.test('payment replay never rolls back later access; reversal blocks the exact receipt immediately',async()=>{
     await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:a,role:'authenticated',aal:'aal2'})]);await db.exec('set role authenticated');

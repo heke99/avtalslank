@@ -30,7 +30,7 @@ export function runtimeConfig(env: Record<string, string | undefined>): RuntimeC
     if (scannerHost && (!/^[a-zA-Z0-9_.:-]+$/.test(scannerHost) || scannerHost.length > 253))
         invalid.push('CLAMAV_HOST');
     const missing = [...(!url ? ['SUPABASE_URL'] : []), ...(!key ? ['SUPABASE_SERVICE_ROLE_KEY'] : []), ...(!scannerHost ? ['CLAMAV_HOST'] : [])];
-    return { port: number('PORT', 8080, 1, 65535), pollMs: number('WORKER_POLL_MS', 5000, 1000, 60000), probeMs: number('WORKER_PROBE_TIMEOUT_MS', 5000, 500, 30000), staleMs: 120000, drainMs: number('WORKER_DRAIN_MS', 60000, 1000, 60000), url, key, scannerHost, scannerPort: number('CLAMAV_PORT', 3310, 1, 65535), missing, invalid };
+    return { port: number('PORT', 8080, 1, 65535), pollMs: number('WORKER_POLL_MS', 2500, 1000, 60000), probeMs: number('WORKER_PROBE_TIMEOUT_MS', 5000, 500, 30000), staleMs: 120000, drainMs: number('WORKER_DRAIN_MS', 60000, 1000, 60000), url, key, scannerHost, scannerPort: number('CLAMAV_PORT', 3310, 1, 65535), missing, invalid };
 }
 export type Dependencies = {
     database: boolean;

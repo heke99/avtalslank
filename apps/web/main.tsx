@@ -1111,6 +1111,24 @@ function EnvelopeDetail({
     [message, setMessage] = useState(e.message),
     [sequential, setSequential] = useState(e.sequential),[expiresDays,setExpiresDays]=useState(e.expires_days),[fieldsDirty,setFieldsDirty]=useState(false);
   function goStep(next:number){if(next===step)return;if(fieldsDirty&&!confirm("Dokumentfälten är inte sparade. Lämna steget och kasta ändringarna?"))return;setFieldsDirty(false);setStep(next);}
+  const recipientForm=useRef<HTMLFormElement>(null);
+  const advanceAfterRecipient=useRef<number|null>(null);
+  const detailRequest=useRef(0);
+  const [detailsLoaded,setDetailsLoaded]=useState(false);
+  function continueFromRecipients(next:number){
+    if(busy)return;
+    const form=recipientForm.current;
+    if(form){
+      const values=new FormData(form);
+      if(String(values.get("name")??"").trim()||String(values.get("email")??"").trim()){
+        advanceAfterRecipient.current=next;
+        try{form.requestSubmit();}finally{advanceAfterRecipient.current=null;}
+        return;
+      }
+      if(!recipients.length){form.reportValidity();return;}
+    }
+    goStep(next);
+  }
   const draftForm=useRef<HTMLFormElement>(null);
   const [uploadStage,setUploadStage]=useState('');
   const [priceHash,setPriceHash]=useState('');
@@ -1119,35 +1137,48 @@ function EnvelopeDetail({
   useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
   useEffect(()=>{const leave=(event:BeforeUnloadEvent)=>{if(dirty){event.preventDefault();event.returnValue='';}};const save=(event:KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'&&draftForm.current){event.preventDefault();if(!busy)draftForm.current.requestSubmit();}};window.addEventListener('beforeunload',leave);window.addEventListener('keydown',save);return()=>{window.removeEventListener('beforeunload',leave);window.removeEventListener('keydown',save);};},[dirty,busy]);
   async function load() {
-    const [a, b, c] = await bounded(Promise.all([
+    const request=++detailRequest.current;
+    const [a, b] = await bounded(Promise.all([
       supabase.from("al_documents").select("*").eq("envelope_id", e.id),
       supabase
         .from("al_recipients")
         .select("*")
         .eq("envelope_id", e.id)
         .order("position"),
-      supabase
-        .from("al_events")
-        .select("id,kind,created_at")
-        .eq("envelope_id", e.id)
-        .order("created_at", { ascending: false })
-        .limit(20),
     ]));
-    if (a.error || b.error || c.error) throw a.error || b.error || c.error;
+    if (request!==detailRequest.current) return;
+    if (a.error || b.error) throw a.error || b.error;
     setDocuments(a.data ?? []);
     setRecipients(b.data ?? []);
-    setEvents(c.data ?? []);
+    setDetailsLoaded(true);
+  }
+  async function loadEvents() {
+    const result=await bounded(supabase.from("al_events").select("id,kind,created_at").eq("envelope_id",e.id).order("created_at",{ascending:false}).limit(20));
+    if (!result.error) setEvents(result.data ?? []);
   }
   async function reloadAfterEdit(){
     const current=await envelopeApi(orgId,e.id,"prepare");
-    if(current.envelope.generation!==e.generation)onSaved({...e,generation:current.envelope.generation});
+    if(typeof current.envelope.generation==="number" && current.envelope.generation!==e.generation)onSaved({...e,generation:current.envelope.generation});
     await load();
   }
   useEffect(() => {
-    action(load);
+    void action(load);
+    void loadEvents().catch(()=>{});
   }, [e.id]);
   const locked = e.status !== "draft";
-  const issues = signingReadiness(documents, recipients, capabilities);
+  const scanning=documents.some(d=>d.status==="pending_scan"||d.status==="scanning");
+  useEffect(()=>{
+    if (!scanning || busy || locked) return;
+    let refreshing=false;
+    const timer=window.setInterval(async()=>{
+      if(document.hidden||refreshing)return;
+      refreshing=true;
+      try{await load();}catch{}finally{refreshing=false;}
+    },2500);
+    return ()=>window.clearInterval(timer);
+  },[scanning,busy,locked,e.id]);
+  const issues = detailsLoaded ? signingReadiness(documents, recipients, capabilities) : [];
+
   return (
     <>
       <button className="back-button" onClick={back}>
@@ -1177,7 +1208,7 @@ function EnvelopeDetail({
             <button
               key={s}
               className={step === i ? "selected" : ""}
-              onClick={() => goStep(i)}
+              onClick={() => step===1&&i>1?continueFromRecipients(i):goStep(i)}
             >
               <span>{i + 1}</span>
               {s}
@@ -1351,19 +1382,22 @@ function EnvelopeDetail({
                     p_method: method,
                     p_position: recipients.length + 1,
                   });
-                  await load();
+                  setPriceHash("");
+                  await reloadAfterEdit();
                 }}
               />
             )}
             {!locked && (
               <form
                 className="recipient-form"
+                ref={recipientForm}
                 onSubmit={(ev) => {
                   ev.preventDefault();
                   const form = ev.currentTarget;
                   const f = new FormData(form);
+                  const advance=advanceAfterRecipient.current;
                   action(async () => {
-                    await rpc("al_add_recipient", {
+                    const saved=await rpc<Recipient>("al_add_recipient", {
                       p_org: orgId,
                       p_envelope: e.id,
                       p_name: f.get("name"),
@@ -1372,7 +1406,10 @@ function EnvelopeDetail({
                       p_position: recipients.length + 1,
                     });
                     form.reset();
-                    await load();
+                    if(saved?.id)setRecipients(current=>current.some(r=>r.id===saved.id)?current:[...current,saved]);
+                    setPriceHash("");
+                    if(advance!==null)goStep(advance);
+                    await reloadAfterEdit();
                   });
                 }}
               >
@@ -1388,7 +1425,7 @@ function EnvelopeDetail({
                 </div>
                 <label>
                   Signeringsmetod
-                  <select name="method" aria-label="Signeringsmetod">
+                  <select name="method" aria-label="Signeringsmetod" defaultValue="email_approval">
                     {Object.entries(methodLabels).map(([key, label]) => (
                       <option key={key} value={key}>
                         {label}
@@ -1405,10 +1442,12 @@ function EnvelopeDetail({
                 </button>
               </form>
             )}
-            <button className="primary next" onClick={() => goStep(2)}>
-              Nästa steg
-              <ArrowRight size={16} />
-            </button>
+            <div className="actions">
+              <button className="primary" disabled={busy} onClick={()=>continueFromRecipients(3)}>
+                Gå till granskning <ArrowRight size={16}/>
+              </button>
+              {!locked&&<button className="secondary" disabled={busy} onClick={()=>continueFromRecipients(2)}>Lägg till PDF-fält eller meddelande</button>}
+            </div>
           </>
         )}
         {step === 2 && (
@@ -1516,6 +1555,7 @@ function EnvelopeDetail({
                 <strong>{methodLabels[r.method]}</strong>
               </div>
             ))}
+            {!detailsLoaded && <button className="secondary" disabled={busy} onClick={()=>action(load)}>Hämta avtalsuppgifter igen</button>}
             {issues.length > 0 && (
               <div className="readiness">
                 <strong>Innan avtalet kan skickas</strong>
@@ -1529,7 +1569,7 @@ function EnvelopeDetail({
                 </p>
               </div>
             )}
-            {!locked&&<><PriceReview orgId={orgId} envelopeId={e.id} generation={e.generation} documentIds={documents.map(d=>d.id)} recipientIds={recipients.map(r=>r.id)} onAccept={setPriceHash}/>{recipients.map(r=><RecipientCompany key={r.id} orgId={orgId} envelopeId={e.id} recipient={r} onSaved={()=>{setPriceHash('');onSaved({...e,generation:e.generation+1});action(load);}}/>)}</>}
+            {!locked&&<><PriceReview orgId={orgId} envelopeId={e.id} generation={e.generation} documentIds={documents.map(d=>d.id)} recipientIds={recipients.map(r=>r.id)} onAccept={setPriceHash} autoLoad={detailsLoaded&&issues.length===0}/>{recipients.map(r=><RecipientCompany key={r.id} orgId={orgId} envelopeId={e.id} recipient={r} onSaved={()=>{setPriceHash('');onSaved({...e,generation:e.generation+1});action(load);}}/>)}</>}
             <div className="actions">
               <button
                 className="secondary danger"
@@ -1556,7 +1596,7 @@ function EnvelopeDetail({
               </button>
               <button
                 className="primary"
-                disabled={busy || locked || dirty || issues.length > 0 || !priceHash}
+                disabled={busy || locked || dirty || !detailsLoaded || issues.length > 0 || !priceHash}
                 onClick={() =>
                   action(async () => {
                     onSaved({

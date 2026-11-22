@@ -200,6 +200,25 @@ async function workspace(page: Page, initialEnvelopes:Array<Record<string,unknow
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Översikt" })).toBeVisible();
 }
+test("review saves a typed recipient and skips confirmation for free signing", async ({page})=>{
+ await workspace(page);
+ await page.route('**/rest/v1/rpc/al_capabilities',r=>r.fulfill({json:[{method:'email_approval',enabled:true}]}));
+ await page.route('**/rest/v1/al_documents*',r=>r.fulfill({json:[{id:'doc',status:'ready',page_count:1,name:'test.pdf'}]}));
+ await page.route('**/v1/envelopes/**/quote*',r=>r.fulfill({json:{data:{hash:'free',complimentary:true,totalOre:0}}}));
+ await page.reload();
+ await page.getByRole('button',{name:'Nytt avtal',exact:true}).click();
+ await page.getByLabel('Avtalets namn').fill('Direkt till granskning');
+ await page.getByRole('button',{name:'Skapa avtal',exact:true}).click();
+ await page.getByRole('button',{name:'Till mottagare'}).click();
+ await page.getByLabel('Namn',{exact:true}).fill('Testmottagare');
+ await page.getByLabel('E-post',{exact:true}).fill('signer@example.invalid');
+ await page.getByRole('button',{name:'Gå till granskning'}).click();
+ await expect(page.getByText('signer@example.invalid',{exact:true})).toBeVisible();
+ await expect(page.getByText('Signering ingår utan kostnad.')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Skicka för signering',exact:true})).toBeEnabled();
+ await expect(page.getByLabel('Jag godkänner priset för detta utskick')).toHaveCount(0);
+});
+
 test("desktop workspace: draft, Freja selection, readiness block, fields, billing remains unconfigured", async ({
   page,
 }) => {
@@ -893,10 +912,20 @@ test('delivery read errors clear after recovery and never imply no deliveries',a
 });
 
 test('a late signing price from an older generation is discarded',async({page})=>{
- await editorWorkspace(page);await page.getByRole('button',{name:/Granska & skicka/}).click();let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);let requested=false;
- await page.route('**/v1/envelopes/'+editorEnvelopeId+'/quote*',async r=>{requested=true;await wait;return r.fulfill({json:{data:{documents:1,signers:1,unitOre:1000,totalOre:1000,hash:'a'.repeat(64)}}});});
+ await editorWorkspace(page);let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);let calls=0;
+ await page.route('**/v1/envelopes/'+editorEnvelopeId+'/quote*',async r=>{
+  if(++calls>1)return r.fulfill({status:409,json:{error:{code:'PRICE_CHANGED'}}});
+  await wait;return r.fulfill({json:{data:{documents:1,signers:1,unitOre:1000,totalOre:1000,hash:'a'.repeat(64)}}});
+ });
  await page.route('**/v1/envelopes/'+editorEnvelopeId+'/party*',r=>r.fulfill({json:{data:{ok:true}}}));
- await page.getByRole('button',{name:'Hämta aktuellt signeringspris'}).click();await expect.poll(()=>requested).toBe(true);await page.getByText('Företagsuppgifter för Mottagaren',{exact:true}).click();await page.getByRole('button',{name:'Spara mottagarens företag'}).click();await expect(page.getByRole('button',{name:'Hämta aktuellt signeringspris'})).toBeEnabled();const response=page.waitForResponse(r=>r.url().includes('/'+editorEnvelopeId+'/quote'));release();await (await response).finished();await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));await expect(page.getByLabel('Jag godkänner priset för detta utskick')).toHaveCount(0);
+ await page.getByRole('button',{name:/Granska & skicka/}).click();
+ await expect.poll(()=>calls).toBe(1);
+ await page.getByText('Företagsuppgifter för Mottagaren',{exact:true}).click();
+ await page.getByRole('button',{name:'Spara mottagarens företag'}).click();
+ await expect.poll(()=>calls).toBeGreaterThan(1);
+ const response=page.waitForResponse(r=>r.url().includes('/'+editorEnvelopeId+'/quote')&&r.ok());
+ release();await (await response).finished();
+ await expect(page.getByLabel('Jag godkänner priset för detta utskick')).toHaveCount(0);
 });
 
 test('document tariff cannot be edited before loading and can recover explicitly',async({page})=>{

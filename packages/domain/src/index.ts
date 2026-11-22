@@ -67,7 +67,9 @@ export function signingReadiness(
 ): string[] {
   const issues: string[] = [];
   if (!documents.length) issues.push("Lägg till minst en PDF.");
-  if (documents.some((d) => d.status !== "ready"))
+  if (documents.some((d) => d.status === "rejected"))
+    issues.push("En PDF underkändes. Byt ut den under Dokument.");
+  if (documents.some((d) => d.status !== "ready" && d.status !== "rejected"))
     issues.push("Dokumentkontrollen måste bli klar före utskick.");
   if (!recipients.length) issues.push("Lägg till minst en mottagare.");
   for (const method of new Set(recipients.map((r) => r.method)))
