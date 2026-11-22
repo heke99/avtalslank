@@ -1,3 +1,4 @@
+import {PdfTemplateEditor,type PdfTemplate} from "./PdfTemplateEditor";
 import {bounded} from "./session";
 import {SignedAgreementSearch,PriceReview,RecipientCompany} from "./SignedAgreements";
 import {MyCommercial} from "./CommercialAdmin";
@@ -113,6 +114,7 @@ type Template = {
   name: string;
   fields: TemplateField[];
   version: number;
+  pdf_path?: string | null;
 };
 type Event = { id: string; kind: string; created_at: string };
 const defaults: ProviderCapability[] = Object.keys(methodLabels).map(
@@ -128,6 +130,25 @@ const date = (s: string) =>
     month: "short",
     year: "numeric",
   }).format(new Date(s));
+async function uploadAgreementPdf(file:File,orgId:string,envelopeId:string,stage:(message:string)=>void=()=>{}){
+  stage("Läser PDF-filen…");
+  const name=safePdfFilename(file.name);
+  if(file.size>10485760)throw Error("DOCUMENT_TOO_LARGE");
+  const bytes=new Uint8Array(await file.arrayBuffer());
+  if(!isPdf(bytes))throw Error("INVALID_PDF");
+  const id=crypto.randomUUID();
+  const hash=await sha256Hex(bytes);
+  stage("Kontrollerar PDF-filen…");
+  const {inspectUpload}=await import("../../packages/signing/src/index.ts");
+  await inspectUpload({documentId:id,envelopeId,name,sha256:hash,byteSize:file.size},bytes);
+  stage("Laddar upp dokumentet…");
+  const {error}=await bounded(supabase.storage.from("al-documents").upload(
+    `${orgId}/${envelopeId}/${id}.pdf`,file,{contentType:"application/pdf",upsert:false}
+  ));
+  if(error)throw error;
+  stage("Sparar dokumentuppgifterna…");
+  return rpc<Document>("al_register_document",{p_org:orgId,p_envelope:envelopeId,p_id:id,p_name:name,p_sha256:hash,p_byte_size:file.size});
+}
 function App() {
   const [session, setSession] = useState<Session | null>(null),
     [loading, setLoading] = useState(true),
@@ -416,6 +437,7 @@ function App() {
                 <button className="primary" type="submit" disabled={busy}>
                   {busy ? "Skapar…" : "Skapa avtal"} <ArrowRight size={17} />
                 </button>
+                {templates.some(template=>template.pdf_path)&&<button className="secondary" type="button" disabled={busy} onClick={()=>{setCreating(false);setView("templates");}}>Använd PDF-mall</button>}
               </form>
             </>
           ) : selected ? (
@@ -650,6 +672,16 @@ function App() {
                   action={action}
                   busy={busy}
                   reload={reload}
+                  createFromPdf={async (title,pdf)=>{
+                    const requestedScope=scope.current;
+                    const envelope=await rpc<Envelope>("al_save_draft",{p_org:orgId,p_title:title});
+                    try { await uploadAgreementPdf(pdf,orgId,envelope.id); }
+                    catch(e){if(scope.current===requestedScope)notify(e);}
+                    if(scope.current!==requestedScope)return;
+                    setEnvelopes(current=>[envelope,...current.filter(item=>item.id!==envelope.id)]);
+                    setView("agreements");
+                    setSelected(envelope);
+                  }}
                 />
               )}
               {view === "developers" && (
@@ -1240,48 +1272,10 @@ function EnvelopeDetail({
                     const file = event.target.files?.[0];
                     if (!file) return;
                     action(async () => {
-                      try{setUploadStage("Läser PDF-filen…");
-                      const name = safePdfFilename(file.name);
-                      if (file.size > 10485760)
-                        throw new Error("DOCUMENT_TOO_LARGE");
-                      if (file.size + documents.reduce((total, document) => total + document.byte_size,0)>52428800) throw Error("DOCUMENT_TOTAL_LIMIT");
-                      const bytes = new Uint8Array(await file.arrayBuffer());
-                      if (!isPdf(bytes)) throw new Error("INVALID_PDF");
-                      const id = crypto.randomUUID();
-                      const hash = await sha256Hex(bytes);
-                      setUploadStage("Kontrollerar PDF-filen…");
-                      const { inspectUpload } = await import(
-                        "../../packages/signing/src/index.ts"
-                      );
-                      await inspectUpload(
-                        {
-                          documentId: id,
-                          envelopeId: e.id,
-                          name,
-                          sha256: hash,
-                          byteSize: file.size,
-                        },
-                        bytes,
-                      );
-                      const path = `${orgId}/${e.id}/${id}.pdf`;
-                      setUploadStage("Laddar upp dokumentet…");
-                      const { error } = await supabase.storage
-                        .from("al-documents")
-                        .upload(path, file, {
-                          contentType: "application/pdf",
-                          upsert: false,
-                        });
-                      if (error) throw error;
-                      setUploadStage("Sparar dokumentuppgifterna…");
-                      await rpc("al_register_document", {
-                        p_org: orgId,
-                        p_envelope: e.id,
-                        p_id: id,
-                        p_name: name,
-                        p_sha256: hash,
-                        p_byte_size: file.size,
-                      });
-                      await load();
+                      try{
+                        if (file.size + documents.reduce((total, document) => total + document.byte_size,0)>52428800) throw Error("DOCUMENT_TOTAL_LIMIT");
+                        await uploadAgreementPdf(file,orgId,e.id,setUploadStage);
+                        await load();
                       }finally{setUploadStage("");}
                     });
                     event.target.value = "";
@@ -1641,17 +1635,26 @@ function Templates({
   action,
   busy,
   reload,
+  createFromPdf,
 }: {
   templates: Template[];
   orgId: string;
   action: (fn: () => Promise<void>) => Promise<void>;
   busy: boolean;
   reload: () => Promise<void>;
+  createFromPdf: (title:string,pdf:File)=>Promise<void>;
 }) {
   const [editing, setEditing] = useState<Template | null>(null),
     [name, setName] = useState(""),
     [fields, setFields] = useState<TemplateField[]>([]),
     [open, setOpen] = useState(false),[query,setQuery]=useState(""),[sort,setSort]=useState("name");
+  const [pdfEditor,setPdfEditor]=useState<{template?:PdfTemplate;useTemplate:boolean}>();
+  if(pdfEditor)return <section className="panel detail-panel">
+    <button type="button" className="back-button" onClick={()=>setPdfEditor(undefined)}>Tillbaka till mallar</button>
+    <h2>{pdfEditor.useTemplate?"Fyll i PDF-mallen":pdfEditor.template?"Redigera PDF-mall":"Ny PDF-mall"}</h2>
+    <PdfTemplateEditor orgId={orgId} template={pdfEditor.template} useTemplate={pdfEditor.useTemplate}
+      onCreate={createFromPdf} onSaved={async()=>{await reload();setPdfEditor(undefined);}}/>
+  </section>;
   const shown=templateList(templates,query,sort);
   const templateDirty=name!==(editing?.name??"")||JSON.stringify(fields)!==JSON.stringify(editing?.fields??[]);
   function begin(t?: Template) {
@@ -1663,7 +1666,8 @@ function Templates({
   return (
     <>
       <div className="section-actions">
-        <button className="primary" onClick={() => begin()}>
+        <button className="primary" onClick={()=>setPdfEditor({useTemplate:false})}><Plus size={16}/> Ny PDF-mall</button>
+        <button className="secondary" onClick={() => begin()}>
           <Plus size={16} />
           Ny fältmall
         </button>
@@ -1682,7 +1686,13 @@ function Templates({
             }
           />
         ) : (
-          shown.length?shown.map((t) => (
+          shown.length?shown.map((t) => t.pdf_path ? (
+            <div className="list-row pdf-template-row" key={t.id}>
+              <Layers size={18}/><div className="grow"><strong>{t.name}</strong><small>PDF-mall · {t.fields.length} fält</small></div>
+              <button className="primary" onClick={()=>setPdfEditor({template:{...t,pdf_path:t.pdf_path!},useTemplate:true})}>Använd mall</button>
+              <button className="secondary" aria-label={"Redigera "+t.name} onClick={()=>setPdfEditor({template:{...t,pdf_path:t.pdf_path!},useTemplate:false})}>Redigera</button>
+            </div>
+          ) : (
             <button
               className="template-row"
               key={t.id}
@@ -1810,7 +1820,15 @@ function Templates({
                 <label>Mottagarroll<input aria-label={'Mottagarroll för fält '+(i+1)} maxLength={120} required value={f.recipientRole} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,recipientRole:ev.target.value}:v))}/></label>
                 <label className="checkbox"><input type="checkbox" checked={f.required} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,required:ev.target.checked}:v))}/>Obligatoriskt fält</label>
                 <label>Sida<input type="number" min={1} max={100} step={1} value={f.page+1} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,page:Number(ev.target.value)-1}:v))}/></label>
-                {(['x','y','width','height'] as const).map(k=><label key={k}>{{x:'Från vänster (%)',y:'Från toppen (%)',width:'Bredd (%)',height:'Höjd (%)'}[k]}<input aria-label={k+' för mallfält '+(i+1)} type="number" min={k==='width'||k==='height'?1:0} max={100} step={1} required value={Math.round(f[k]*100)} onChange={ev=>setFields(fields.map((v,j)=>j===i?{...v,[k]:Number(ev.target.value)/100}:v))}/></label>)}
+                {(['x','y','width','height'] as const).map(k=><label key={k}>{{x:'Från vänster (%)',y:'Från toppen (%)',width:'Bredd (%)',height:'Höjd (%)'}[k]}<input aria-label={k+' för mallfält '+(i+1)} type="number" min={k==='width'||k==='height'?1:0} max={100} step={1} required value={Math.round(f[k]*100)} onChange={ev=>{
+                  const value=Number(ev.target.value)/100;
+                  setFields(fields.map((v,j)=>{
+                    if(j!==i)return v;
+                    const next={...v,[k]:k==='width'||k==='height'?Math.max(0.01,value):value};
+                    const maxX=Math.round((1-next.width)*100)/100,maxY=Math.round((1-next.height)*100)/100;
+                    return {...next,x:Math.max(0,Math.min(next.x,maxX)),y:Math.max(0,Math.min(next.y,maxY))};
+                  }));
+                }}/></label>)}
                 <button
                   type="button"
                   className="icon"

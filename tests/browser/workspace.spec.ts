@@ -768,6 +768,49 @@ test("new fields can be placed on the second page of a rendered PDF", async ({ p
   expect(state.saved()[0].y).toBeCloseTo(0.6, 2);
 });
 
+test("PDF template fields are placed, filled and exported in the agreement PDF", async ({page})=>{
+ await workspace(page);
+ let stored:any, uploaded:Buffer|undefined;
+ const pdfLib=await import('pdf-lib');
+ const original=await pdfLib.PDFDocument.create();
+ original.addPage([600,800]);
+ const bytes=Buffer.from(await original.save());
+ await page.route('**/storage/v1/object/al-documents/**',r=>{
+  if(r.request().method()==='GET')return r.fulfill({contentType:'application/pdf',body:bytes});
+  if(r.request().url().includes('/templates/'))return r.fulfill({json:{Key:'synthetic-template'}});
+  uploaded=r.request().postDataBuffer()??undefined;
+  return r.fulfill({json:{Key:'synthetic-agreement'}});
+ });
+ await page.route('**/rest/v1/rpc/al_save_pdf_template',r=>{
+  const body=r.request().postDataJSON();
+  expect(body.p_fields[0]).toMatchObject({label:'Förnamn',recipientRole:'Avsändare',page:0});
+  expect(body.p_fields[0].x).toBeCloseTo(0.3,2);
+  stored={id:'pdf-template',version:1,name:body.p_name,fields:body.p_fields,pdf_path:body.p_path};
+  return r.fulfill({json:stored});
+ });
+ await page.route('**/rest/v1/al_templates*',r=>r.fulfill({json:stored?[stored]:[]}));
+ await page.getByRole('button',{name:'Mallar',exact:true}).click();
+ await page.getByRole('button',{name:'Ny PDF-mall'}).click();
+ await page.getByLabel('Mallens PDF',{exact:true}).setInputFiles({name:'Kundmall.pdf',mimeType:'application/pdf',buffer:bytes});
+ const canvas=page.getByLabel('PDF-sida 1',{exact:true});
+ await expect(canvas).toBeVisible();
+ await page.getByRole('button',{name:'Lägg till fält',exact:true}).click();
+ await page.getByLabel('Fältnamn',{exact:true}).fill('Förnamn');
+ const bounds=(await canvas.boundingBox())!;
+ await canvas.click({position:{x:bounds.width*0.3,y:bounds.height*0.4}});
+ await page.getByRole('button',{name:'Spara PDF-mall'}).click();
+ await page.getByRole('button',{name:'Använd mall'}).click();
+ await page.getByLabel('Förnamn',{exact:true}).fill('Anna');
+ await expect(page.locator('.placed-field')).toHaveText('Anna');
+ await page.getByRole('button',{name:'Skapa avtal med ifylld PDF'}).click();
+ await expect(page.getByRole('heading',{name:'Kundmall',exact:true})).toBeVisible();
+ expect(uploaded).toBeDefined();
+ const start=uploaded!.indexOf('%PDF');
+ const end=uploaded!.lastIndexOf('%%EOF');
+ const filled=await pdfLib.PDFDocument.load(uploaded!.subarray(start,end+5));
+ expect(filled.context.enumerateIndirectObjects().some(([,object])=>object instanceof pdfLib.PDFRawStream&&Buffer.from(pdfLib.decodePDFRawStream(object).decode()).toString().includes('416E6E61'))).toBeTruthy();
+});
+
 test('template search and editor persist roles, required flags and page geometry',async({page})=>{
  await workspace(page,[],[],[editorTemplate,{...editorTemplate,id:'eeee5555-5555-4555-8555-555555555555',name:'Årsuppgifter',version:1}]);await page.getByRole('button',{name:'Mallar',exact:true}).click();await page.getByLabel('Sök fältmall').fill('finns inte');await expect(page.getByText('Inga fältmallar matchar sökningen.')).toBeVisible();await page.getByLabel('Sök fältmall').fill('Kunduppgifter');await expect(page.locator('.template-row')).toHaveCount(1);await page.getByLabel('Sortera fältmallar').selectOption('version');await page.locator('.template-row').click();
  const dialog=page.getByRole('dialog',{name:'Redigera fältmall'});await dialog.getByLabel('Mottagarroll för fält 1').fill('Firmatecknare');await dialog.getByLabel('Obligatoriskt fält').check();await dialog.getByLabel('Sida',{exact:true}).fill('2');await dialog.getByLabel('x för mallfält 1').fill('25');

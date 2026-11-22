@@ -31,14 +31,16 @@ export function fieldPosition(field: Box, geometry: PageGeometry, x: number, y: 
     (y + overlay.height) * viewport.height,
   );
   const round = (value: number) => Math.round(value * 10000) / 10000;
+  const maxStart = (size: number) => Math.floor((1-size)*10000+1e-9)/10000;
   return {
-    x: Math.min(1 - field.width, Math.max(0, round(Math.min(x1, x2) / width))),
-    y: Math.min(1 - field.height, Math.max(0, round(1 - Math.max(y1, y2) / height))),
+    x: Math.min(maxStart(field.width), Math.max(0, round(Math.min(x1, x2) / width))),
+    y: Math.min(maxStart(field.height), Math.max(0, round(1 - Math.max(y1, y2) / height))),
   };
 }
 
-export function PdfFieldPage({ path, page, onRendered }: {
-  path: string;
+export function PdfFieldPage({ path, source, page, onRendered }: {
+  path?: string;
+  source?: Blob;
   page: number;
   onRendered: (geometry: PageGeometry | undefined) => void;
 }) {
@@ -55,8 +57,13 @@ export function PdfFieldPage({ path, page, onRendered }: {
     setLoadError(false);
     setPreview(undefined);
     async function load() {
-      const { data, error } = await bounded(supabase.storage.from("al-documents").download(path));
-      if (error) throw error;
+      let data=source;
+      if (!data) {
+        if (!path) throw Error("DOCUMENT_REQUIRED");
+        const result=await bounded(supabase.storage.from("al-documents").download(path));
+        if (result.error) throw result.error;
+        data=result.data;
+      }
       const [pdfjs, { PDFDocument }, bytes] = await Promise.all([
         import("pdfjs-dist"),
         import("pdf-lib"),
@@ -78,7 +85,7 @@ export function PdfFieldPage({ path, page, onRendered }: {
     }
     void load().catch(() => { if (active) setLoadError(true); });
     return () => { active = false; void task?.destroy().catch(() => {}); };
-  }, [path, attempt, onRendered]);
+  }, [path, source, attempt, onRendered]);
   useEffect(() => {
     let active = true;
     let render: RenderTask | undefined;
